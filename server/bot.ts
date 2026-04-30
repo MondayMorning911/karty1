@@ -1,10 +1,11 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 import dotenv from 'dotenv';
 dotenv.config();
 
 // Usually Telegram token from env, or fallback to the one user provided
-const token = process.env.TELEGRAM_BOT_TOKEN || "8778970389:AAGg4g82GJBmg0Gd9EzcHuE-IBA5HNpgsiI";
+const token = process.env.TELEGRAM_BOT_TOKEN;
 
 let bot: TelegramBot | null = null;
 
@@ -15,9 +16,14 @@ export function startBot() {
   }
 
   const proxyUrl = process.env.PROXY_URL;
-  const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
-
+  let agent;
+  
   if (proxyUrl) {
+    if (proxyUrl.startsWith('socks')) {
+      agent = new SocksProxyAgent(proxyUrl);
+    } else {
+      agent = new HttpsProxyAgent(proxyUrl);
+    }
     console.log(`Using proxy for Telegram Bot: ${proxyUrl}`);
   }
 

@@ -1,10 +1,22 @@
 import OpenAI from 'openai';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 import dotenv from 'dotenv';
 dotenv.config();
+
+let httpAgent;
+if (process.env.PROXY_URL) {
+  if (process.env.PROXY_URL.startsWith('socks')) {
+    httpAgent = new SocksProxyAgent(process.env.PROXY_URL);
+  } else {
+    httpAgent = new HttpsProxyAgent(process.env.PROXY_URL);
+  }
+}
 
 const openai = new OpenAI({
   baseURL: 'https://api.deepseek.com',
   apiKey: process.env.DEEPSEEK_API_KEY,
+  httpAgent: httpAgent,
 });
 
 // Since the user is editing, we debounce the input on frontend

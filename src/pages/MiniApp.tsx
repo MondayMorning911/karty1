@@ -101,7 +101,9 @@ function CreateTab() {
   // Real coordinates from geocoding or drag
   const [addressCoords, setAddressCoords] = useState<{lat: number, lng: number} | null>(null);
 
-  // Debounced API call for AI parsing
+  const [activeEnhance, setActiveEnhance] = useState<string | null>(null);
+
+  // Debounced API call for AI parsing (extracts fields without rewriting text unless selectedStyle changes but let's decouple text rewriting)
   useEffect(() => {
     if (!desc || desc.length < 10) return;
     
@@ -111,10 +113,10 @@ function CreateTab() {
         const res = await fetch('/api/parse-listing', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ text: desc, styleId: selectedStyle })
+          body: JSON.stringify({ text: desc, styleId: 'original' }) // Always pass original for background parsing
         });
         const data = await res.json();
-        setParsedData(data);
+        setParsedData(prev => ({...prev, ...data, enhanced_text: prev?.enhanced_text || ''}));
         if (data && data.address && data.lat && data.lng) {
           if (!addressCoords) {
              setAddressCoords({ lat: data.lat, lng: data.lng });
@@ -129,7 +131,30 @@ function CreateTab() {
     }, 1200);
 
     return () => clearTimeout(handler);
-  }, [desc, selectedStyle]);
+  }, [desc]);
+
+  const handleStyleClick = async (styleId: StyleOption) => {
+    setSelectedStyle(styleId);
+    if (styleId === 'original') return;
+    if (!desc || desc.length < 5) return;
+    
+    setActiveEnhance(styleId);
+    try {
+      const res = await fetch('/api/parse-listing', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ text: desc, styleId })
+      });
+      const data = await res.json();
+      if (data?.enhanced_text) {
+        setDesc(data.enhanced_text);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActiveEnhance(null);
+    }
+  };
 
   // Derived parsed fields for UI
   const parsedAddress = parsedData?.address;
@@ -164,7 +189,7 @@ function CreateTab() {
       const listingData = {
         userId: auth.currentUser.uid,
         title: displayTitle === 'Объект' && parsedAddress ? parsedAddress : displayTitle,
-        desc: parsedData?.enhanced_text || desc,
+        desc: desc,
         date: new Date().toISOString(),
         status: 'published',
         platforms: activePlatforms,
@@ -204,7 +229,7 @@ function CreateTab() {
         <h1 className="text-[26px] font-bold tracking-tight text-[#061b31] dark:text-white/90 leading-tight pr-12">Новое объявление</h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-40">
         
         {/* Text Area block */}
         <div className="space-y-3">
@@ -212,6 +237,11 @@ function CreateTab() {
             <textarea 
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
+              onFocus={(e) => {
+                setTimeout(() => {
+                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+              }}
               placeholder={"Например: 2к квартира у метро в Батуми, 55 метров, 120 000 $..."}
               className="w-full h-32 bg-transparent text-[15px] sm:text-[16px] text-[#061b31] dark:text-gray-200 placeholder:text-[#64748d] dark:placeholder:text-gray-600 focus:outline-none resize-none border-none leading-relaxed" 
             />
@@ -276,16 +306,21 @@ function CreateTab() {
             {DUMMY_STYLES.map((style) => (
               <button
                 key={style.id}
-                onClick={() => setSelectedStyle(style.id)}
+                onClick={() => handleStyleClick(style.id)}
+                disabled={activeEnhance !== null}
                 className={`w-full justify-center px-3 py-2 rounded-lg text-[13px] sm:text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   selectedStyle === style.id && style.id !== 'original'
                     ? 'bg-[#533afd] text-white shadow-md shadow-[#533afd]/20' 
                     : selectedStyle === style.id && style.id === 'original'
                     ? 'bg-[#061b31] dark:bg-white text-white dark:text-black' 
                     : 'bg-[#ffffff] dark:bg-white/[0.03] text-[#64748d] dark:text-gray-400 border border-[#e5edf5] dark:border-white/10 hover:border-[#533afd]/30 dark:hover:border-white/20 hover:bg-[#533afd]/5 dark:hover:bg-white/[0.08]'
-                }`}
+                } ${activeEnhance !== null ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                {style.id !== 'original' && <Sparkles size={12} className={selectedStyle === style.id ? 'text-white' : 'text-[#533afd] dark:text-blue-400'} />}
+                {activeEnhance === style.id ? (
+                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  style.id !== 'original' && <Sparkles size={12} className={selectedStyle === style.id ? 'text-white' : 'text-[#533afd] dark:text-blue-400'} />
+                )}
                 {style.label}
               </button>
             ))}
@@ -345,11 +380,12 @@ function CreateTab() {
             
             <div className="flex-1 w-full bg-gray-100 dark:bg-[#050505] relative">
               <Map
+                key={`${addressCoords?.lat}-${addressCoords?.lng}`} // Форсирует перецентровку
                 mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
                 initialViewState={{
                   longitude: addressCoords?.lng || 41.6168,
                   latitude: addressCoords?.lat || 41.6366,
-                  zoom: 14
+                  zoom: 15
                 }}
                 mapStyle="mapbox://styles/mapbox/streets-v12"
               >
