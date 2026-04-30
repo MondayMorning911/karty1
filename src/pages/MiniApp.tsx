@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { Camera, Star, X, Sparkles, FilePlus2, Layers, History, RefreshCcw, CheckCircle2, MoreVertical, Moon, Sun, ArrowRight, MapPin } from "lucide-react";
 import { KorterIcon, SSIcon, RealtingIcon, MyHomeIcon } from '../components/PlatformIcons';
 import { KorterAuth } from '../components/KorterAuth';
-import Map, { Marker } from 'react-map-gl/mapbox';
+import Map, { Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { auth, db } from '../firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
