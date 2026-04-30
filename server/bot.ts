@@ -1,9 +1,10 @@
 import TelegramBot from 'node-telegram-bot-api';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import dotenv from 'dotenv';
 dotenv.config();
 
 // Usually Telegram token from env, or fallback to the one user provided
-const token = process.env.TELEGRAM_BOT_TOKEN || "8778970389:AAGh3yon0yOv6hBkIHznNbupDkp6QxiZ78o";
+const token = process.env.TELEGRAM_BOT_TOKEN || "8778970389:AAGg4g82GJBmg0Gd9EzcHuE-IBA5HNpgsiI";
 
 let bot: TelegramBot | null = null;
 
@@ -14,7 +15,13 @@ export function startBot() {
   }
 
   // Create a bot that uses 'polling' to fetch new updates
-  bot = new TelegramBot(token, { polling: true });
+  const options: TelegramBot.ConstructorOptions = { polling: true };
+  if (process.env.PROXY_URL) {
+    console.log(`Using proxy for Telegram Bot: ${process.env.PROXY_URL}`);
+    const agent = new HttpsProxyAgent(process.env.PROXY_URL);
+    options.request = { agent };
+  }
+  bot = new TelegramBot(token, options);
 
   // Fallback app URL if process.env.APP_URL is not set (you'll set it in production)
   // For AI Studio, it will be injected.
@@ -36,9 +43,5 @@ export function startBot() {
 
   bot.on('polling_error', (error) => {
     console.log("Telegram Bot Polling Error:", error);
-  });
-
-  bot.on('error', (error) => {
-    console.log("Telegram Bot General Error:", error);
   });
 }
