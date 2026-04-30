@@ -1,10 +1,15 @@
-import React, { useState, MouseEvent, ChangeEvent, useEffect } from "react";
+import React, { useState, MouseEvent, ChangeEvent, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { TabType } from "../types";
 import { Link } from "react-router-dom";
-import { Camera, Star, X, Sparkles, FilePlus2, Layers, History, RefreshCcw, CheckCircle2, MoreVertical, Moon, Sun, ArrowRight } from "lucide-react";
+import { Camera, Star, X, Sparkles, FilePlus2, Layers, History, RefreshCcw, CheckCircle2, MoreVertical, Moon, Sun, ArrowRight, MapPin } from "lucide-react";
 import { KorterIcon, SSIcon, RealtingIcon, MyHomeIcon } from '../components/PlatformIcons';
 import { KorterAuth } from '../components/KorterAuth';
+import Map, { Marker } from 'react-map-gl/mapbox';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import { auth, db } from '../firebase';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
 
 // Same shadow constants as LandingPage
 const STRIPE_SHADOW = "shadow-[0_13px_27px_-5px_rgba(50,50,93,0.05),0_8px_16px_-8px_rgba(0,0,0,0.03)] dark:shadow-none";
@@ -19,7 +24,7 @@ const DUMMY_STYLES = [
 
 type StyleOption = typeof DUMMY_STYLES[number]['id'];
 
-interface HistoryItem {
+export interface HistoryItem {
   id: string;
   title: string;
   desc: string;
@@ -27,14 +32,8 @@ interface HistoryItem {
   platforms: string[];
   status: 'published' | 'draft' | 'error';
   image?: string;
+  userId?: string;
 }
-
-const DUMMY_HISTORY: HistoryItem[] = [
-  { id: '1', title: '2-к. квартира, 65 м²', desc: 'Просторная квартира рядом с метро, хороший ремонт.', date: 'Сегодня, 14:30', platforms: ['korter', 'ss'], status: 'published', image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=200&q=80' },
-  { id: '2', title: 'Студия, 32 м²', desc: 'Уютная студия в новом ЖК для одного человека.', date: 'Вчера, 18:15', platforms: ['myhome'], status: 'published' },
-  { id: '3', title: 'Дом, 120 м²', desc: 'Двухэтажный дом с участком 6 соток, есть гараж.', date: '21 Окт', platforms: ['korter', 'realting'], status: 'draft', image: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=200&q=80' },
-  { id: '4', title: '3-к. квартира, 85 м²', desc: 'Квартира без ремонта в тихом спальном районе.', date: '18 Окт', platforms: ['ss'], status: 'error' },
-];
 
 interface PageProps {
   theme: 'light' | 'dark';
@@ -43,10 +42,22 @@ interface PageProps {
 
 export function MiniApp({ theme, toggleTheme }: PageProps) {
   const [activeTab, setActiveTab] = useState<TabType>("create");
+  const [uid, setUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      if (user) {
+        setUid(user.uid);
+      } else {
+        signInAnonymously(auth).catch(console.error);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   return (
-    <div className="flex justify-center w-full min-h-screen bg-[#f7f9fc] dark:bg-[#050505] font-sans text-[#061b31] dark:text-gray-200 selection:bg-[#533afd]/20 selection:text-[#533afd] transition-colors duration-500">
-      <div className={`w-full sm:max-w-[375px] h-[100dvh] sm:h-[700px] sm:my-auto bg-[#ffffff] dark:bg-[#0F0F0F] relative flex flex-col sm:rounded-[32px] sm:border border-[#e5edf5] dark:border-[#1A1A1A] ${ELEVATE_SHADOW} overflow-hidden transition-colors duration-500`}>
+    <div className="flex justify-center w-full min-h-[100dvh] bg-[#f7f9fc] dark:bg-[#050505] font-sans text-[#061b31] dark:text-gray-200 selection:bg-[#533afd]/20 selection:text-[#533afd] transition-colors duration-500 overflow-hidden">
+      <div className={`w-full sm:max-w-[375px] h-[100dvh] sm:h-[750px] sm:my-auto bg-[#ffffff] dark:bg-[#0F0F0F] relative flex flex-col sm:rounded-[32px] sm:border border-[#e5edf5] dark:border-[#1A1A1A] ${ELEVATE_SHADOW} overflow-hidden transition-colors duration-500`}>
         
         {/* Header theme toggle inside the phone app, right corner */}
         <div className="absolute top-4 right-4 z-50">
@@ -55,7 +66,7 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
           </button>
         </div>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden relative bg-[#ffffff] dark:bg-[#0F0F0F] transition-colors duration-500 pb-24">
+        <main className="flex-1 overflow-hidden relative bg-[#ffffff] dark:bg-[#0F0F0F] transition-colors duration-500">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -81,19 +92,100 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
 function CreateTab() {
   const [desc, setDesc] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<StyleOption>('selling');
-
-  // Simulated AI parsing
-  const addressMatch = desc.match(/(?:в г\.?\s*|город\s*|г\.\s*)?([А-Яа-я]{4,15})\b|(батуми|тбилиси|москва|киев|алматы|минск)/i);
-  const areaMatch = desc.match(/(\d+(?:\.\d+)?)\s*(м2|м²|кв|метров|м\b)/i);
-  const priceMatch = desc.match(/(\d+(?:\s\d+)?)\s*(\$|лари|руб|usd|gel|₽|€)/i);
-  const roomsMatch = desc.match(/(\d+)\s*(к\b|-к|ком|комнат\b|\s*квартира)/i);
-
-  let parsedAddress = addressMatch ? (addressMatch[1] || addressMatch[2]) : null;
-  if (parsedAddress) parsedAddress = parsedAddress.charAt(0).toUpperCase() + parsedAddress.slice(1).toLowerCase();
   
-  const parsedArea = areaMatch ? areaMatch[1] + ' м²' : null;
-  const parsedPrice = priceMatch ? priceMatch[0] : null;
-  const parsedRooms = roomsMatch ? roomsMatch[1] : null;
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [parsedData, setParsedData] = useState<any>(null);
+  const [showAddressConfirmation, setShowAddressConfirmation] = useState(false);
+  const [showFullscreenMap, setShowFullscreenMap] = useState(false);
+  
+  // Real coordinates from geocoding or drag
+  const [addressCoords, setAddressCoords] = useState<{lat: number, lng: number} | null>(null);
+
+  // Debounced API call for AI parsing
+  useEffect(() => {
+    if (!desc || desc.length < 10) return;
+    
+    const handler = setTimeout(async () => {
+      setIsAiLoading(true);
+      try {
+        const res = await fetch('/api/parse-listing', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ text: desc, styleId: selectedStyle })
+        });
+        const data = await res.json();
+        setParsedData(data);
+        if (data && data.address && data.lat && data.lng) {
+          if (!addressCoords) {
+             setAddressCoords({ lat: data.lat, lng: data.lng });
+             setShowAddressConfirmation(true);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsAiLoading(false);
+      }
+    }, 1200);
+
+    return () => clearTimeout(handler);
+  }, [desc, selectedStyle]);
+
+  // Derived parsed fields for UI
+  const parsedAddress = parsedData?.address;
+  const parsedArea = parsedData?.area;
+  const parsedPrice = parsedData?.price;
+  const parsedRooms = parsedData?.rooms;
+  const parsedFloor = parsedData?.floor;
+  
+  const handleMapConfirmation = (confirm: boolean) => {
+    setShowAddressConfirmation(false);
+    if (!confirm) {
+      setShowFullscreenMap(true);
+    }
+  };
+
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  const handlePublish = async () => {
+    if (!desc.trim()) return;
+    if (!auth.currentUser) {
+      alert("Авторизуйтесь для публикации");
+      return;
+    }
+    setIsPublishing(true);
+    try {
+      // Collect valid active platforms
+      const activePlatforms = ['Korter', 'SS.ge']; // Mocks for now
+
+      // Real title calculation
+      const displayTitle = [parsedRooms ? `${parsedRooms}-к. квартира` : 'Объект', parsedArea].filter(Boolean).join(', ');
+
+      const listingData = {
+        userId: auth.currentUser.uid,
+        title: displayTitle === 'Объект' && parsedAddress ? parsedAddress : displayTitle,
+        desc: parsedData?.enhanced_text || desc,
+        date: new Date().toISOString(),
+        status: 'published',
+        platforms: activePlatforms,
+        image: ''
+      };
+
+      await addDoc(collection(db, 'listings'), listingData);
+      
+      setDesc("");
+      setParsedData(null);
+      setAddressCoords(null);
+      // Reset is handled, could navigate to history:
+      // (Depends on parent state, let's just show alert or success for now since we don't have direct access to setActiveTab)
+      alert("Успешно опубликовано!");
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка при публикации");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
@@ -126,9 +218,34 @@ function CreateTab() {
             
             <div className="mt-2 pt-3 border-t border-[#e5edf5] dark:border-white/5">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-[11px] uppercase tracking-wider text-[#64748d] dark:text-gray-500 font-bold flex items-center gap-1"><Sparkles size={10} className="text-[#533afd] dark:text-blue-400" /> Распознано AI</span>
+                <span className="text-[11px] uppercase tracking-wider text-[#64748d] dark:text-gray-500 font-bold flex items-center gap-1">
+                  <Sparkles size={10} className="text-[#533afd] dark:text-blue-400" /> 
+                  Распознано AI {isAiLoading && <span className="animate-pulse">...</span>}
+                </span>
                 <span className="text-[11px] text-[#a0aabf] dark:text-gray-600 font-medium">{desc.length}/2000</span>
               </div>
+
+              {showAddressConfirmation && parsedAddress && (
+                <div className="mb-3 bg-[#e8f7ec] dark:bg-[#15be53]/10 border border-[#15be53]/20 dark:border-[#15be53]/30 rounded-xl p-3 shadow-sm">
+                  <div className="flex items-start gap-2 mb-2">
+                    <MapPin size={16} className="text-[#15be53] shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[13px] text-[#061b31] dark:text-white font-medium leading-tight">
+                        Я нашел адрес: {parsedAddress}. <br/>Верно?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleMapConfirmation(true)} className="flex-1 py-1.5 bg-[#15be53] hover:bg-[#12a849] text-white text-[12px] font-bold rounded-lg transition-colors">
+                      Да, подтверждаю
+                    </button>
+                    <button onClick={() => handleMapConfirmation(false)} className="flex-1 py-1.5 bg-[#ffffff] dark:bg-white/10 hover:bg-gray-50 dark:hover:bg-white/20 border border-[#e5edf5] dark:border-white/10 text-[12px] font-bold text-[#061b31] dark:text-white rounded-lg transition-colors">
+                      Уточнить на карте
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-1.5 min-h-[26px]">
                 {(!parsedAddress && !parsedArea && !parsedPrice && !parsedRooms) && <span className="text-[11px] text-[#a0aabf] dark:text-gray-600 font-medium my-auto">Начните вводить текст...</span>}
                 {parsedAddress && (
@@ -198,7 +315,7 @@ function CreateTab() {
         </div>
 
         {/* Platforms */}
-        <div className="space-y-3">
+        <div className="space-y-3 pb-24">
           <h3 className="text-[12px] uppercase tracking-wider text-[#64748d] dark:text-gray-500 font-bold">Площадки для публикации</h3>
           <div className="space-y-2">
             <PlatformCheckbox name="Korter" active={true} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
@@ -209,10 +326,63 @@ function CreateTab() {
         </div>
       </div>
       
+      {/* Fullscreen Map Overlay */}
+      <AnimatePresence>
+        {showFullscreenMap && (
+          <motion.div 
+            initial={{ opacity: 0, y: "100%" }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="absolute inset-0 z-[100] bg-white dark:bg-[#0F0F0F] flex flex-col"
+          >
+            <div className="flex justify-between items-center p-4 border-b border-[#e5edf5] dark:border-[#1A1A1A] bg-white/50 dark:bg-black/50 backdrop-blur-md absolute top-0 w-full z-10">
+              <h3 className="font-bold text-[16px] text-[#061b31] dark:text-white">Укажите точку</h3>
+              <button onClick={() => setShowFullscreenMap(false)} className="p-2 bg-gray-100 dark:bg-white/10 rounded-full">
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="flex-1 w-full bg-gray-100 dark:bg-[#050505] relative">
+              <Map
+                mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+                initialViewState={{
+                  longitude: addressCoords?.lng || 41.6168,
+                  latitude: addressCoords?.lat || 41.6366,
+                  zoom: 14
+                }}
+                mapStyle="mapbox://styles/mapbox/streets-v12"
+              >
+                <Marker 
+                  longitude={addressCoords?.lng || 41.6168} 
+                  latitude={addressCoords?.lat || 41.6366} 
+                  anchor="bottom"
+                  draggable
+                  onDragEnd={(e) => setAddressCoords({ lng: e.lngLat.lng, lat: e.lngLat.lat })}
+                >
+                  <MapPin size={32} className="text-[#533afd] fill-white" />
+                </Marker>
+              </Map>
+            </div>
+            
+            <div className="p-4 border-t border-[#e5edf5] dark:border-[#1A1A1A]">
+              <button 
+                onClick={() => setShowFullscreenMap(false)} 
+                className="w-full bg-[#533afd] hover:bg-[#4434d4] text-white rounded-xl py-3 font-semibold text-[15px] transition-transform active:scale-[0.98]">
+                Сохранить точку
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Sticky Bottom button */}
-      <div className="sticky bottom-0 w-full p-4 bg-gradient-to-t from-[#f6f9fc] dark:from-[#050505] via-[#f6f9fc]/90 dark:via-[#050505]/90 to-transparent pb-8">
-        <button className={`w-full bg-[#15be53] hover:bg-[#12a849] text-white rounded-[14px] py-4 font-semibold text-[15px] transition-transform active:scale-[0.98] ${STRIPE_SHADOW} flex items-center justify-center gap-2`}>
-          Опубликовать <ArrowRight size={16} />
+      <div className="sticky bottom-0 w-full p-4 bg-gradient-to-t from-[#f6f9fc] dark:from-[#050505] via-[#f6f9fc]/90 dark:via-[#050505]/90 to-transparent pb-8 z-40">
+        <button 
+          onClick={handlePublish}
+          disabled={isPublishing || !desc.trim()}
+          className={`w-full bg-[#15be53] hover:bg-[#12a849] disabled:opacity-50 text-white rounded-[14px] py-4 font-semibold text-[15px] transition-transform active:scale-[0.98] ${STRIPE_SHADOW} flex items-center justify-center gap-2`}>
+          {isPublishing ? "Публикация..." : "Опубликовать"} <ArrowRight size={16} />
         </button>
       </div>
     </div>
@@ -309,6 +479,28 @@ function PlatformAuthCard({ name, isConnected, total, activeViews, logoBg, logoC
 }
 
 function HistoryTab() {
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    const q = query(collection(db, 'listings'), where('userId', '==', auth.currentUser.uid));
+    const unsub = onSnapshot(q, (snap) => {
+      const items: HistoryItem[] = [];
+      snap.forEach(doc => {
+        items.push({ id: doc.id, ...doc.data() } as HistoryItem);
+      });
+      // Simple date sort descending
+      items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setHistory(items);
+      setLoading(false);
+    }, (error) => {
+      console.error(error);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
   return (
     <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/15 blur-[80px] rounded-full pointer-events-none" />
@@ -329,7 +521,9 @@ function HistoryTab() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-8 text-[#061b31] dark:text-gray-200">
-        {DUMMY_HISTORY.map((item) => (
+        {loading && <p className="text-center text-sm text-gray-500 mt-4">Загрузка...</p>}
+        {!loading && history.length === 0 && <p className="text-center text-sm text-gray-500 mt-4">У вас пока нет объектов.</p>}
+        {history.map((item) => (
           <div key={item.id} className="bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/5 rounded-[16px] p-3 shadow-sm dark:shadow-none transition-colors">
             <div className="flex gap-3">
               <div className="w-[72px] h-[72px] rounded-[10px] bg-[#f6f9fc] dark:bg-white/[0.05] border border-[#e5edf5] dark:border-white/5 shrink-0 overflow-hidden flex items-center justify-center text-gray-300 dark:text-gray-600 transition-colors">
@@ -347,7 +541,9 @@ function HistoryTab() {
                   </button>
                 </div>
                 <p className="text-[12px] text-[#64748d] dark:text-gray-400 mt-1 line-clamp-2 leading-snug">{item.desc}</p>
-                <p className="text-[11px] text-[#a0aabf] dark:text-gray-500 mt-1.5">{item.date}</p>
+                <p className="text-[11px] text-[#a0aabf] dark:text-gray-500 mt-1.5">
+                  {new Date(item.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </p>
                 
                 <div className="flex items-center gap-1.5 mt-2">
                   {item.status === 'published' && <StatusBadge type="success" text="Опубликовано" />}
@@ -388,7 +584,7 @@ function StatusBadge({ type, text }: { type: 'success' | 'neutral' | 'error', te
 
 function BottomBar({ activeTab, onTabChange }: { activeTab: TabType, onTabChange: (t: TabType) => void }) {
   return (
-    <div className="absolute bottom-0 left-0 w-full h-20 bg-[#ffffff]/90 dark:bg-[#0F0F0F]/90 backdrop-blur-xl border-t border-[#e5edf5] dark:border-white/5 px-8 flex justify-between items-center z-50 pb-safe transition-colors duration-500">
+    <div className="w-full h-[80px] shrink-0 bg-[#ffffff]/90 dark:bg-[#0F0F0F]/90 backdrop-blur-xl border-t border-[#e5edf5] dark:border-white/5 px-8 flex justify-between items-center z-50 pb-safe transition-colors duration-500">
       <NavItem 
         icon={<FilePlus2 size={24} strokeWidth={activeTab === 'create' ? 2.5 : 2} />} 
         label="Новое" 

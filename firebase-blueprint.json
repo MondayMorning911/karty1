@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "Listing": {
+      "title": "Listing",
+      "description": "Property listing draft or published object",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "desc": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["published", "draft", "error"] },
+        "platforms": { "type": "array", "items": { "type": "string" } },
+        "image": { "type": "string" }
+      },
+      "required": ["userId", "title", "desc", "status"]
+    }
+  },
+  "firestore": {
+    "listings/{listingId}": {
+      "schema": { "$ref": "#/entities/Listing" },
+      "description": "User property listings"
+    }
+  }
+}

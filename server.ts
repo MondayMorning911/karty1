@@ -2,8 +2,9 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import cors from 'cors';
-import { korterAuthManager } from './server/korterAuth';
-import { startBot } from './server/bot';
+import { korterAuthManager } from './server/korterAuth.js';
+import { startBot } from './server/bot.js';
+import { parseListingWithDeepSeek } from './server/ai.js';
 
 async function startServer() {
   const app = express();
@@ -11,12 +12,6 @@ async function startServer() {
 
   app.use(cors());
   app.use(express.json());
-
-  // Пропуск экрана предупреждения ngrok
-  app.use((req, res, next) => {
-    res.header('ngrok-skip-browser-warning', 'true');
-    next();
-  });
 
   // Init Telegram Bot
   startBot();
@@ -47,6 +42,14 @@ async function startServer() {
     
     console.log(`Verifying code for Korter: ${userId}`);
     const result = await korterAuthManager.verifyCode(userId, code);
+    res.json(result);
+  });
+
+  // Parse Listing with deepseek
+  app.post('/api/parse-listing', async (req, res) => {
+    const { text, styleId } = req.body;
+    if (!text) return res.json(null);
+    const result = await parseListingWithDeepSeek(text, styleId);
     res.json(result);
   });
 

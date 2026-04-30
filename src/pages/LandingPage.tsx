@@ -413,7 +413,7 @@ function AnimatedPhoneMockup({ lang, t }: { lang: Language, t: any }) {
   ];
 
   return (
-    <div className="relative w-full aspect-[1/2.2] sm:aspect-[9/19] rounded-[26px] bg-white dark:bg-[#0A0A0A] overflow-hidden flex flex-col transition-colors duration-500">
+    <div className="relative w-full aspect-[1/2.2] sm:aspect-[9/19] rounded-[26px] bg-white dark:bg-[#0A0A0A] overflow-hidden flex flex-col transition-colors duration-500 pointer-events-none select-none">
       <div className="absolute top-2 left-1/2 -translate-x-1/2 w-24 h-6 bg-black rounded-full z-50"></div>
 
       {/* Header */}
