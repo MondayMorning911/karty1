@@ -14,14 +14,18 @@ export function startBot() {
     return;
   }
 
-  // Create a bot that uses 'polling' to fetch new updates
-  const options: TelegramBot.ConstructorOptions = { polling: true };
-  if (process.env.PROXY_URL) {
-    console.log(`Using proxy for Telegram Bot: ${process.env.PROXY_URL}`);
-    const agent = new HttpsProxyAgent(process.env.PROXY_URL);
-    options.request = { agent };
+  const proxyUrl = process.env.PROXY_URL;
+  const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+
+  if (proxyUrl) {
+    console.log(`Using proxy for Telegram Bot: ${proxyUrl}`);
   }
-  bot = new TelegramBot(token, options);
+
+  // Create a bot that uses 'polling' to fetch new updates
+  bot = new TelegramBot(token, { 
+    polling: true,
+    request: agent ? { agent } : undefined
+  });
 
   // Fallback app URL if process.env.APP_URL is not set (you'll set it in production)
   // For AI Studio, it will be injected.
