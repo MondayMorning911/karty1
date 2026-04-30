@@ -55,14 +55,27 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (window.Telegram?.WebApp) {
+      const tg = window.Telegram.WebApp;
+      tg.expand();
+      if (tg.disableVerticalSwipes) {
+        tg.disableVerticalSwipes();
+      }
+    }
+  }, []);
+
   return (
-    <div className="flex justify-center w-full min-h-[100dvh] bg-[#f7f9fc] dark:bg-[#050505] font-sans text-[#061b31] dark:text-gray-200 selection:bg-[#533afd]/20 selection:text-[#533afd] transition-colors duration-500 overflow-hidden">
-      <div className={`w-full sm:max-w-[375px] h-[100dvh] sm:h-[750px] sm:my-auto bg-[#ffffff] dark:bg-[#0F0F0F] relative flex flex-col sm:rounded-[32px] sm:border border-[#e5edf5] dark:border-[#1A1A1A] ${ELEVATE_SHADOW} overflow-hidden transition-colors duration-500`}>
+    <div className="fixed inset-0 flex justify-center w-full bg-[#f7f9fc] dark:bg-[#050505] font-sans text-[#061b31] dark:text-gray-200 selection:bg-[#533afd]/20 selection:text-[#533afd] transition-colors duration-500 overflow-hidden z-50">
+      <div className={`w-full h-full sm:max-w-[375px] sm:h-[750px] sm:my-auto bg-[#ffffff] dark:bg-[#0F0F0F] relative flex flex-col sm:rounded-[32px] sm:border border-[#e5edf5] dark:border-[#1A1A1A] ${ELEVATE_SHADOW} overflow-hidden transition-colors duration-500`}>
         
         {/* Header theme toggle inside the phone app, right corner */}
-        <div className="absolute top-4 right-4 z-50">
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
           <button onClick={toggleTheme} className="p-2 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-full text-[#64748d] dark:text-gray-400 hover:text-[#533afd] dark:hover:text-white transition-colors" title="Сменить тему">
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <button onClick={() => window.Telegram?.WebApp?.close?.() || window.close()} className="px-3 py-1.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-[12px] font-semibold text-[12px] text-[#061b31] dark:text-white hover:text-red-500 dark:hover:text-red-400 transition-colors shadow-sm">
+            Закрыть
           </button>
         </div>
 
@@ -237,11 +250,6 @@ function CreateTab() {
             <textarea 
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
-              onFocus={(e) => {
-                setTimeout(() => {
-                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 300);
-              }}
               placeholder={"Например: 2к квартира у метро в Батуми, 55 метров, 120 000 $..."}
               className="w-full h-32 bg-transparent text-[15px] sm:text-[16px] text-[#061b31] dark:text-gray-200 placeholder:text-[#64748d] dark:placeholder:text-gray-600 focus:outline-none resize-none border-none leading-relaxed" 
             />
