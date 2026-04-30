@@ -387,26 +387,34 @@ function CreateTab() {
             </div>
             
             <div className="flex-1 w-full bg-gray-100 dark:bg-[#050505] relative">
-              <Map
-                key={`${addressCoords?.lat}-${addressCoords?.lng}`} // Форсирует перецентровку
-                mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-                initialViewState={{
-                  longitude: addressCoords?.lng || 41.6168,
-                  latitude: addressCoords?.lat || 41.6366,
-                  zoom: 15
-                }}
-                mapStyle="mapbox://styles/mapbox/streets-v12"
-              >
-                <Marker 
-                  longitude={addressCoords?.lng || 41.6168} 
-                  latitude={addressCoords?.lat || 41.6366} 
-                  anchor="bottom"
-                  draggable
-                  onDragEnd={(e) => setAddressCoords({ lng: e.lngLat.lng, lat: e.lngLat.lat })}
-                >
-                  <MapPin size={32} className="text-[#533afd] fill-white" />
-                </Marker>
-              </Map>
+              {(() => {
+                const mapCoords = addressCoords || (desc.toLowerCase().includes('тбилиси') 
+                  ? { lng: 44.793, lat: 41.7151 } 
+                  : { lng: 41.6366, lat: 41.6168 });
+                
+                return (
+                  <Map
+                    key={`${mapCoords.lat}-${mapCoords.lng}`} // Форсирует перецентровку
+                    mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+                    initialViewState={{
+                      longitude: mapCoords.lng,
+                      latitude: mapCoords.lat,
+                      zoom: 15
+                    }}
+                    mapStyle="mapbox://styles/mapbox/streets-v12"
+                  >
+                    <Marker 
+                      longitude={mapCoords.lng} 
+                      latitude={mapCoords.lat} 
+                      anchor="bottom"
+                      draggable
+                      onDragEnd={(e) => setAddressCoords({ lng: e.lngLat.lng, lat: e.lngLat.lat })}
+                    >
+                      <MapPin size={32} className="text-[#533afd] fill-white" />
+                    </Marker>
+                  </Map>
+                );
+              })()}
             </div>
             
             <div className="p-4 border-t border-[#e5edf5] dark:border-[#1A1A1A]">
