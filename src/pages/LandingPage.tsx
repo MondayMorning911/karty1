@@ -112,10 +112,10 @@ export function LandingPage({ theme, toggleTheme }: PageProps) {
               transition={{ duration: 0.5, delay: 0.3 }}
               className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 pt-4 w-full sm:w-auto"
             >
-              <Link to="/app" className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-[#533afd] hover:bg-[#4434d4] text-white rounded-lg font-medium ${STRIPE_SHADOW} transition-all active:scale-[0.98]`}>
+              <a href="https://t.me/KartyEstate_bot" target="_blank" rel="noopener noreferrer" className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-[#533afd] hover:bg-[#4434d4] text-white rounded-lg font-medium ${STRIPE_SHADOW} transition-all active:scale-[0.98]`}>
                 <span>{t.hero.btnTry}</span>
                 <ArrowRight size={18} />
-              </Link>
+              </a>
               <a href="#features" className="w-full sm:w-auto flex items-center justify-center px-8 py-4 bg-transparent hover:bg-[#533afd]/[0.05] dark:hover:bg-white/10 text-[#533afd] dark:text-white border border-[#d6d9fc] dark:border-white/20 rounded-lg font-medium transition-all active:scale-[0.98]">
                 {t.hero.btnHow}
               </a>
@@ -298,10 +298,10 @@ export function LandingPage({ theme, toggleTheme }: PageProps) {
         <div className="absolute inset-0 bg-[#533afd]/10" />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center relative z-10">
           <h2 className="text-[32px] sm:text-[40px] md:text-[56px] font-light tracking-[-1.5px] text-white mb-6 sm:mb-8">{t.cta.title}</h2>
-          <Link to="/app" className="inline-flex items-center justify-center gap-2 px-10 py-5 bg-[#533afd] hover:bg-[#4434d4] text-white rounded-lg font-medium shadow-xl transition-transform active:scale-95">
+          <a href="https://t.me/KartyEstate_bot" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-10 py-5 bg-[#533afd] hover:bg-[#4434d4] text-white rounded-lg font-medium shadow-xl transition-transform active:scale-95">
             <span>{t.cta.btn}</span>
             <ArrowRight size={18} />
-          </Link>
+          </a>
         </div>
       </section>
 
