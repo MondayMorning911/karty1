@@ -14,7 +14,7 @@ if (!admin.apps.length) {
 
 const db = getFirestore();
 const BROWSERLESS_WS_URL = 'ws://72.56.1.59:3001/chromium?token=KartyMustPassword';
-const BROWSERLESS_DEBUG_URL = 'http://72.56.1.59:3001/debugger/?token=KartyMustPassword';
+const BROWSERLESS_DEBUG_URL = 'http://72.56.1.59:3001/?token=KartyMustPassword';
 
 export class AuthManager {
   static async startSession(userId: string, platform: 'ssge' | 'myhome' | 'realting' | 'korter') {

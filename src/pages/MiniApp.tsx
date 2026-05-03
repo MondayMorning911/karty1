@@ -556,7 +556,7 @@ function PlatformsTab() {
           <div className="p-4 flex items-center justify-between border-b border-[#e5edf5] dark:border-white/10 bg-white dark:bg-[#0F0F0F]">
             <div className="flex flex-col">
               <h3 className="font-bold text-[16px]">Авторизация</h3>
-              <span className="text-xs text-gray-400">Если пусто, нажмите «Открыть в браузере»</span>
+              <span className="text-xs text-gray-400">Нажмите "В браузере" и выберите активную сессию</span>
             </div>
             <div className="flex gap-2">
               <button onClick={() => {
