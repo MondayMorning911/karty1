@@ -461,15 +461,21 @@ function PlatformsTab() {
 
   const handleCaptureAuth = async (siteKey: string) => {
     try {
-      if (!auth.currentUser) {
-        alert('Пользователь не авторизован в системе (Firebase).');
-        return;
+      let user = auth.currentUser;
+      if (!user) {
+        try {
+          const cred = await signInAnonymously(auth);
+          user = cred.user;
+        } catch (e: any) {
+          alert('Ошибка авторизации (Firebase): ' + e.message);
+          return;
+        }
       }
       
       const response = await fetch('/api/auth/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: auth.currentUser.uid, siteKey })
+        body: JSON.stringify({ userId: user.uid, siteKey })
       });
       
       if (!response.ok) {
@@ -488,12 +494,22 @@ function PlatformsTab() {
   };
 
   const handleRemoveSession = async (siteKey: string) => {
-    if (!auth.currentUser) return;
     try {
+      let user = auth.currentUser;
+      if (!user) {
+        try {
+          const cred = await signInAnonymously(auth);
+          user = cred.user;
+        } catch (e: any) {
+          alert('Ошибка авторизации (Firebase): ' + e.message);
+          return;
+        }
+      }
+      
       await fetch('/api/auth/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: auth.currentUser.uid, siteKey })
+        body: JSON.stringify({ userId: user.uid, siteKey })
       });
     } catch (e: any) {
       alert('Ошибка: ' + e.message);
