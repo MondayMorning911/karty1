@@ -556,7 +556,7 @@ function PlatformsTab() {
           <div className="p-4 flex items-center justify-between border-b border-[#e5edf5] dark:border-white/10 bg-white dark:bg-[#0F0F0F]">
             <div className="flex flex-col">
               <h3 className="font-bold text-[16px]">Авторизация</h3>
-              <span className="text-xs text-gray-400">Авторизуйтесь. Если форма не работает, нажмите "В браузере"</span>
+              <span className="text-xs text-gray-400 text-left max-w-[200px]">Авторизуйтесь ниже. Если не грузится, нажмите "В браузере" (Cannot GET означает, что сессия не найдена/закрыта)</span>
             </div>
             <div className="flex gap-2">
               <button onClick={() => {

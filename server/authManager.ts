@@ -56,28 +56,31 @@ export class AuthManager {
       this.watchForLogin(page, context, userId, platform, browser);
 
       // Wait briefly for Browserless to register the session (retry up to 3 times)
-      let sessionId = '';
+      let interactiveUrl = BROWSERLESS_DEBUG_URL;
       for (let i = 0; i < 3; i++) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         try {
-          const response = await fetch('http://72.56.1.59:3001/sessions?token=KartyMustPassword');
+          const response = await fetch('http://72.56.1.59:3001/json/list?token=KartyMustPassword');
           if (response.ok) {
-            const sessions = await response.json();
-            const targetSession = sessions.find((s: any) => s.trackingId === trackingId);
-            if (targetSession && targetSession.id) {
-              sessionId = targetSession.id;
+            const targets = await response.json();
+            // find the target that belongs to our browser context/page if possible, or just the latest page
+            const targetSession = targets.find((t: any) => t.type === 'page' && t.url && t.url !== 'about:blank');
+            if (targetSession && targetSession.devtoolsFrontendUrl) {
+              // The devtools URL from browserless might be a relative path or contain ws://
+              let debugUrl = targetSession.devtoolsFrontendUrl;
+              if (debugUrl.startsWith('/devtools/')) {
+                 debugUrl = `http://72.56.1.59:3001${debugUrl}&token=KartyMustPassword`;
+                 // Note: Replace ws= with wss= if needed, though http:// implies ws= is fine.
+              }
+              interactiveUrl = debugUrl;
+              console.log("[AuthManager] Found DevTools URL:", interactiveUrl);
               break;
             }
           }
         } catch (err: any) {
-          console.error('[AuthManager] Error fetching active sessions:', err.message);
+          console.error('[AuthManager] Error fetching json list:', err.message);
         }
       }
-
-      // If we couldn't find the exact session, fallback to the generic debugger
-      const interactiveUrl = sessionId 
-        ? `http://72.56.1.59:3001/debugger/?token=KartyMustPassword&id=${sessionId}` 
-        : BROWSERLESS_DEBUG_URL;
 
       // Return the interactive URL so the user can open it in iframe
       return { interactiveUrl };
