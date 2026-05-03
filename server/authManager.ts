@@ -20,9 +20,12 @@ export class AuthManager {
   static async startSession(userId: string, platform: 'ssge' | 'myhome' | 'realting' | 'korter') {
     console.log(`[AuthManager] Starting browserless session for ${platform} (User: ${userId})`);
 
+    const trackingId = `${userId}_${Date.now()}`;
+    const wsUrl = `${BROWSERLESS_WS_URL}&trackingId=${trackingId}`;
+
     try {
       // Connect to Browserless
-      const browser = await chromium.connectOverCDP(BROWSERLESS_WS_URL);
+      const browser = await chromium.connectOverCDP(wsUrl);
       
       const context = browser.contexts()[0] || await browser.newContext({
         viewport: { width: 1280, height: 720 },
@@ -31,19 +34,19 @@ export class AuthManager {
       
       const page = await context.newPage();
 
-      // Navigate to the respective login page
+      // Navigate to the respective login page, but do not block the API response
       switch (platform) {
         case 'ssge':
-          await page.goto('https://ss.ge/ru/real-estate/Login', { timeout: 60000 });
+          page.goto('https://ss.ge/ru/real-estate/Login', { timeout: 60000 }).catch(e => console.error(e));
           break;
         case 'myhome':
-          await page.goto('https://www.myhome.ge/ru/login', { timeout: 60000 });
+          page.goto('https://www.myhome.ge/ru/login', { timeout: 60000 }).catch(e => console.error(e));
           break;
         case 'realting':
-          await page.goto('https://realting.com/ru/login', { timeout: 60000 });
+          page.goto('https://realting.com/ru/login', { timeout: 60000 }).catch(e => console.error(e));
           break;
         case 'korter':
-          await page.goto('https://korter.ge/ru/', { timeout: 60000, waitUntil: 'domcontentloaded' });
+          page.goto('https://korter.ge/ru/', { timeout: 60000, waitUntil: 'domcontentloaded' }).catch(e => console.error(e));
           break;
         default:
           throw new Error('Unknown platform: ' + platform);
@@ -52,8 +55,32 @@ export class AuthManager {
       // Start watching for login in the background
       this.watchForLogin(page, context, userId, platform, browser);
 
+      // Wait briefly for Browserless to register the session (retry up to 3 times)
+      let sessionId = '';
+      for (let i = 0; i < 3; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          const response = await fetch('http://72.56.1.59:3001/sessions?token=KartyMustPassword');
+          if (response.ok) {
+            const sessions = await response.json();
+            const targetSession = sessions.find((s: any) => s.trackingId === trackingId);
+            if (targetSession && targetSession.id) {
+              sessionId = targetSession.id;
+              break;
+            }
+          }
+        } catch (err: any) {
+          console.error('[AuthManager] Error fetching active sessions:', err.message);
+        }
+      }
+
+      // If we couldn't find the exact session, fallback to the generic debugger
+      const interactiveUrl = sessionId 
+        ? `http://72.56.1.59:3001/debugger/?token=KartyMustPassword&id=${sessionId}` 
+        : BROWSERLESS_DEBUG_URL;
+
       // Return the interactive URL so the user can open it in iframe
-      return { interactiveUrl: BROWSERLESS_DEBUG_URL };
+      return { interactiveUrl };
     } catch (error: any) {
       console.error(`[AuthManager] Failed to start session:`, error.message);
       throw error;

