@@ -5,7 +5,11 @@ import type { Page, BrowserContext } from 'playwright-core';
 
 // Ensure Firebase is initialized
 if (!admin.apps.length) {
-  admin.initializeApp();
+  try {
+    admin.initializeApp();
+  } catch (e: any) {
+    console.error("Firebase admin initialization warning:", e.message);
+  }
 }
 
 const db = getFirestore();
@@ -30,16 +34,16 @@ export class AuthManager {
       // Navigate to the respective login page
       switch (platform) {
         case 'ssge':
-          await page.goto('https://ss.ge/ru/real-estate/Login');
+          await page.goto('https://ss.ge/ru/real-estate/Login', { timeout: 60000 });
           break;
         case 'myhome':
-          await page.goto('https://www.myhome.ge/ru/login');
+          await page.goto('https://www.myhome.ge/ru/login', { timeout: 60000 });
           break;
         case 'realting':
-          await page.goto('https://realting.com/ru/login');
+          await page.goto('https://realting.com/ru/login', { timeout: 60000 });
           break;
         case 'korter':
-          await page.goto('https://korter.ge/ru/');
+          await page.goto('https://korter.ge/ru/', { timeout: 60000, waitUntil: 'domcontentloaded' });
           break;
         default:
           throw new Error('Unknown platform: ' + platform);

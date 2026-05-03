@@ -47,6 +47,10 @@ async function startServer() {
     res.json(result);
   });
 
+  app.post('/api/auth/test-error', async (req, res) => {
+    res.status(500).json({ error: 'This is a test error from backend JSON.' });
+  });
+
   // Capture Session API
   app.post('/api/auth/capture', async (req, res) => {
     console.log('[API] /api/auth/capture hit:', req.body);

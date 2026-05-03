@@ -462,12 +462,19 @@ function PlatformsTab() {
   const handleCaptureAuth = async (siteKey: string) => {
     try {
       let user = auth.currentUser;
+      const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+      const fallbackUserId = tgUser ? String(tgUser.id) : 'anonymous_user';
+
       if (!user) {
         try {
           const cred = await signInAnonymously(auth);
           user = cred.user;
         } catch (e: any) {
-          alert('Ошибка авторизации (Firebase): ' + e.message);
+          if (e.code === 'auth/admin-restricted-operation') {
+            alert('Ошибка: необходимо включить "Anonymous provider" (Анонимный вход) в Firebase Console -> Authentication -> Sign-in method.');
+          } else {
+            alert('Ошибка авторизации (Firebase): ' + e.message);
+          }
           return;
         }
       }
@@ -475,11 +482,20 @@ function PlatformsTab() {
       const response = await fetch('/api/auth/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid, siteKey })
+        body: JSON.stringify({ userId: user ? user.uid : fallbackUserId, siteKey })
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        let errorMsg = `HTTP Error: ${response.status} ${response.statusText}`;
+        try {
+          const errData = await response.json();
+          if (errData && errData.error) {
+            errorMsg = errData.error;
+          }
+        } catch (e) {
+          // ignore json parse error
+        }
+        throw new Error(errorMsg);
       }
       
       const data = await response.json();
@@ -496,21 +512,38 @@ function PlatformsTab() {
   const handleRemoveSession = async (siteKey: string) => {
     try {
       let user = auth.currentUser;
+      const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+      const fallbackUserId = tgUser ? String(tgUser.id) : 'anonymous_user';
+
       if (!user) {
         try {
           const cred = await signInAnonymously(auth);
           user = cred.user;
         } catch (e: any) {
-          alert('Ошибка авторизации (Firebase): ' + e.message);
+          if (e.code === 'auth/admin-restricted-operation') {
+            alert('Ошибка: необходимо включить "Anonymous provider" (Анонимный вход) в Firebase Console -> Authentication -> Sign-in method.');
+          } else {
+            alert('Ошибка авторизации (Firebase): ' + e.message);
+          }
           return;
         }
       }
       
-      await fetch('/api/auth/remove', {
+      const response = await fetch('/api/auth/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid, siteKey })
+        body: JSON.stringify({ userId: user ? user.uid : fallbackUserId, siteKey })
       });
+      if (!response.ok) {
+        let errorMsg = `HTTP Error: ${response.status} ${response.statusText}`;
+        try {
+          const errData = await response.json();
+          if (errData && errData.error) {
+            errorMsg = errData.error;
+          }
+        } catch (e) {}
+        throw new Error(errorMsg);
+      }
     } catch (e: any) {
       alert('Ошибка: ' + e.message);
     }
