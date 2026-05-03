@@ -5,6 +5,8 @@ import cors from 'cors';
 import { korterAuthManager } from './server/korterAuth.js';
 import { startBot } from './server/bot.js';
 import { parseListingWithDeepSeek } from './server/ai.js';
+import { AuthManager } from './server/authManager.js';
+import { getFirestore } from 'firebase-admin/firestore';
 
 async function startServer() {
   const app = express();
@@ -47,17 +49,21 @@ async function startServer() {
 
   // Capture Session API
   app.post('/api/auth/capture', async (req, res) => {
+    console.log('[API] /api/auth/capture hit:', req.body);
     const { userId, siteKey } = req.body;
     if (!userId || !siteKey) {
+      console.log('[API] /api/auth/capture failed: Missing userId or siteKey');
       return res.status(400).json({ error: 'userId and siteKey are required' });
     }
 
     try {
-      const { AuthManager } = await import('./server/authManager.js');
+      console.log(`[API] AuthManager StartSession...`);
       const { interactiveUrl } = await AuthManager.startSession(userId, siteKey as any);
+      console.log(`[API] AuthManager success. URL: ${interactiveUrl}`);
       
       res.json({ success: true, interactiveUrl });
     } catch (error: any) {
+      console.error('[API] /api/auth/capture Error:', error.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -70,7 +76,6 @@ async function startServer() {
     }
 
     try {
-      const { getFirestore } = await import('firebase-admin/firestore');
       await getFirestore().doc(`sessions/${userId}/platforms/${siteKey}`).delete();
       res.json({ success: true, message: 'Session removed' });
     } catch (error: any) {

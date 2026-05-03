@@ -460,21 +460,30 @@ function PlatformsTab() {
   }, []);
 
   const handleCaptureAuth = async (siteKey: string) => {
-    if (!auth.currentUser) return;
     try {
+      if (!auth.currentUser) {
+        alert('Пользователь не авторизован в системе (Firebase).');
+        return;
+      }
+      
       const response = await fetch('/api/auth/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: auth.currentUser.uid, siteKey })
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+      }
+      
       const data = await response.json();
       if (data.interactiveUrl) {
         setInteractiveUrl(data.interactiveUrl);
       } else if (data.error) {
-        alert('Ошибка: ' + data.error);
+        alert('Ошибка API: ' + data.error);
       }
     } catch (e: any) {
-      alert('Ошибка: ' + e.message);
+      alert('Сетевая ошибка или сбой: ' + e.message);
     }
   };
 
@@ -494,12 +503,25 @@ function PlatformsTab() {
   return (
     <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
       {interactiveUrl && (
-        <div className="absolute inset-0 z-50 bg-[#f7f9fc] dark:bg-[#050505] flex flex-col">
+        <div className="absolute inset-0 z-[100] bg-[#f7f9fc] dark:bg-[#050505] flex flex-col">
           <div className="p-4 flex items-center justify-between border-b border-[#e5edf5] dark:border-white/10 bg-white dark:bg-[#0F0F0F]">
-            <h3 className="font-bold text-[16px]">Авторизация</h3>
-            <button onClick={() => setInteractiveUrl(null)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-sm font-semibold">Закрыть</button>
+            <div className="flex flex-col">
+              <h3 className="font-bold text-[16px]">Авторизация</h3>
+              <span className="text-xs text-gray-400">Если пусто, нажмите «Открыть в браузере»</span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => {
+                const tg = (window as any).Telegram?.WebApp;
+                if (tg && tg.openLink) {
+                  tg.openLink(interactiveUrl);
+                } else {
+                  window.open(interactiveUrl, '_blank');
+                }
+              }} className="px-3 py-1.5 bg-[#533afd]/10 text-[#533afd] rounded-lg text-sm font-semibold">В браузере</button>
+              <button onClick={() => setInteractiveUrl(null)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-sm font-semibold">Закрыть</button>
+            </div>
           </div>
-          <iframe src={interactiveUrl} className="flex-1 w-full border-none" />
+          <iframe src={interactiveUrl} className="flex-1 w-full border-none" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
         </div>
       )}
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/15 blur-[80px] rounded-full pointer-events-none" />
