@@ -45,6 +45,39 @@ async function startServer() {
     res.json(result);
   });
 
+  // Capture Session API
+  app.post('/api/auth/capture', async (req, res) => {
+    const { userId, siteKey } = req.body;
+    if (!userId || !siteKey) {
+      return res.status(400).json({ error: 'userId and siteKey are required' });
+    }
+
+    try {
+      const { AuthManager } = await import('./server/authManager.js');
+      const { interactiveUrl } = await AuthManager.startSession(userId, siteKey as any);
+      
+      res.json({ success: true, interactiveUrl });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove Session API
+  app.post('/api/auth/remove', async (req, res) => {
+    const { userId, siteKey } = req.body;
+    if (!userId || !siteKey) {
+      return res.status(400).json({ error: 'userId and siteKey are required' });
+    }
+
+    try {
+      const { getFirestore } = await import('firebase-admin/firestore');
+      await getFirestore().doc(`sessions/${userId}/platforms/${siteKey}`).delete();
+      res.json({ success: true, message: 'Session removed' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Parse Listing with deepseek
   app.post('/api/parse-listing', async (req, res) => {
     const { text, styleId } = req.body;

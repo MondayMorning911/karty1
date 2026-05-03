@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { LandingPage } from "./pages/LandingPage";
 import { MiniApp } from "./pages/MiniApp";
+import { Crm } from "./pages/Crm";
 import { useEffect, useState } from "react";
 
 function RootRoute({ theme, toggleTheme }: { theme: 'light' | 'dark', toggleTheme: () => void }) {
@@ -31,6 +32,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRoute theme={theme} toggleTheme={toggleTheme} />} />
         <Route path="/app/*" element={<MiniApp theme={theme} toggleTheme={toggleTheme} />} />
+        <Route path="/crm/*" element={<Crm />} />
       </Routes>
     </BrowserRouter>
   );

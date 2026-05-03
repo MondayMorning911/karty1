@@ -16,21 +16,23 @@ export function startBot() {
   }
 
   const proxyUrl = process.env.PROXY_URL;
-  let agent;
+  let requestOpts: any = undefined;
   
   if (proxyUrl) {
+    let agent: any;
     if (proxyUrl.startsWith('socks')) {
       agent = new SocksProxyAgent(proxyUrl);
     } else {
       agent = new HttpsProxyAgent(proxyUrl);
     }
+    requestOpts = { agent };
     console.log(`Using proxy for Telegram Bot: ${proxyUrl}`);
   }
 
   // Create a bot that uses 'polling' to fetch new updates
   bot = new TelegramBot(token, { 
     polling: true,
-    request: agent ? { agent } : undefined
+    request: requestOpts
   });
 
   // Fallback app URL if process.env.APP_URL is not set (you'll set it in production)

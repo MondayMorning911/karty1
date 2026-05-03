@@ -16,10 +16,7 @@ export const KorterAuth = ({ onBack, userId }: { onBack: () => void, userId: str
       try {
         const res = await fetch('/api/auth/korter/start', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'ngrok-skip-browser-warning': 'true'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, login: value })
         });
         const data = await res.json();
@@ -43,10 +40,7 @@ export const KorterAuth = ({ onBack, userId }: { onBack: () => void, userId: str
       try {
         const res = await fetch('/api/auth/korter/verify', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'ngrok-skip-browser-warning': 'true'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, code: value })
         });
         const data = await res.json();

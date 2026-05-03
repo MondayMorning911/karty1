@@ -57,8 +57,8 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
 
   useEffect(() => {
     if (window.Telegram?.WebApp) {
-      const tg = window.Telegram.WebApp;
-      tg.expand();
+      const tg = window.Telegram.WebApp as any;
+      if (tg.expand) tg.expand();
       if (tg.disableVerticalSwipes) {
         tg.disableVerticalSwipes();
       }
@@ -74,7 +74,7 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
           <button onClick={toggleTheme} className="p-2 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-full text-[#64748d] dark:text-gray-400 hover:text-[#533afd] dark:hover:text-white transition-colors" title="Сменить тему">
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button onClick={() => window.Telegram?.WebApp?.close?.() || window.close()} className="px-3 py-1.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-[12px] font-semibold text-[12px] text-[#061b31] dark:text-white hover:text-red-500 dark:hover:text-red-400 transition-colors shadow-sm">
+          <button onClick={() => (window.Telegram?.WebApp as any)?.close?.() || window.close()} className="px-3 py-1.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-[12px] font-semibold text-[12px] text-[#061b31] dark:text-white hover:text-red-500 dark:hover:text-red-400 transition-colors shadow-sm">
             Закрыть
           </button>
         </div>
@@ -442,14 +442,66 @@ function CreateTab() {
 }
 
 function PlatformsTab() {
-  const [authPlatform, setAuthPlatform] = React.useState<string | null>(null);
+  const [sessions, setSessions] = useState<Record<string, any>>({});
+  const [interactiveUrl, setInteractiveUrl] = useState<string | null>(null);
 
-  if (authPlatform === 'Korter') {
-    return <KorterAuth onBack={() => setAuthPlatform(null)} userId="user_123" />;
-  }
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    const unsub = onSnapshot(collection(db, `sessions/${auth.currentUser.uid}/platforms`), (snap) => {
+      const data: Record<string, any> = {};
+      snap.forEach(doc => {
+        data[doc.id] = doc.data();
+      });
+      setSessions(data);
+    }, (error) => {
+      console.error(error);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleCaptureAuth = async (siteKey: string) => {
+    if (!auth.currentUser) return;
+    try {
+      const response = await fetch('/api/auth/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: auth.currentUser.uid, siteKey })
+      });
+      const data = await response.json();
+      if (data.interactiveUrl) {
+        setInteractiveUrl(data.interactiveUrl);
+      } else if (data.error) {
+        alert('Ошибка: ' + data.error);
+      }
+    } catch (e: any) {
+      alert('Ошибка: ' + e.message);
+    }
+  };
+
+  const handleRemoveSession = async (siteKey: string) => {
+    if (!auth.currentUser) return;
+    try {
+      await fetch('/api/auth/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: auth.currentUser.uid, siteKey })
+      });
+    } catch (e: any) {
+      alert('Ошибка: ' + e.message);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
+      {interactiveUrl && (
+        <div className="absolute inset-0 z-50 bg-[#f7f9fc] dark:bg-[#050505] flex flex-col">
+          <div className="p-4 flex items-center justify-between border-b border-[#e5edf5] dark:border-white/10 bg-white dark:bg-[#0F0F0F]">
+            <h3 className="font-bold text-[16px]">Авторизация</h3>
+            <button onClick={() => setInteractiveUrl(null)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-sm font-semibold">Закрыть</button>
+          </div>
+          <iframe src={interactiveUrl} className="flex-1 w-full border-none" />
+        </div>
+      )}
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/15 blur-[80px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/10 blur-[100px] rounded-full pointer-events-none" />
 
@@ -459,10 +511,10 @@ function PlatformsTab() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-8">
-        <PlatformAuthCard onClick={() => setAuthPlatform('Korter')} name="Korter" isConnected={false} total={245} activeViews={1240} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
-        <PlatformAuthCard name="SS.ge" isConnected={true} total={42} activeViews={380} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
-        <PlatformAuthCard name="Realting" isConnected={false} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
-        <PlatformAuthCard name="MyHome" isConnected={false} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="korter" onAuth={handleCaptureAuth} onRemoveSession={handleRemoveSession} name="Korter" isConnected={!!sessions['korter']} total={sessions['korter'] ? 245 : 0} activeViews={sessions['korter'] ? 1240 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="ssge" onAuth={handleCaptureAuth} onRemoveSession={handleRemoveSession} name="SS.ge" isConnected={!!sessions['ssge']} total={sessions['ssge'] ? 42 : 0} activeViews={sessions['ssge'] ? 380 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="realting" onAuth={handleCaptureAuth} onRemoveSession={handleRemoveSession} name="Realting" isConnected={!!sessions['realting']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="myhome" onAuth={handleCaptureAuth} onRemoveSession={handleRemoveSession} name="MyHome" isConnected={!!sessions['myhome']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
       </div>
     </div>
   );
@@ -488,9 +540,23 @@ function PlatformCheckbox({ name, active, logoBg, logoColor, logo }: any) {
   );
 }
 
-function PlatformAuthCard({ name, isConnected, total, activeViews, logoBg, logoColor, logo, onClick }: any) {
+function PlatformAuthCard({ name, siteKey, isConnected, total, activeViews, logoBg, logoColor, logo, onAuth, onRemoveSession }: any) {
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const handleAuth = async () => {
+    setIsLoading(true);
+    await onAuth(siteKey);
+    setIsLoading(false);
+  };
+
+  const handleRemove = async () => {
+    setIsLoading(true);
+    await onRemoveSession(siteKey);
+    setIsLoading(false);
+  };
+
   return (
-    <div onClick={onClick} className="flex flex-col p-4 rounded-[16px] bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/5 cursor-pointer hover:border-[#c1d1e0] dark:hover:border-white/10 shadow-sm dark:shadow-none transition-colors">
+    <div className="flex flex-col p-4 rounded-[16px] bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/5 shadow-sm dark:shadow-none transition-colors relative">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-full ${logoBg} flex items-center justify-center ${logoColor} font-bold text-lg border border-[#e5edf5] dark:border-white/5`}>
@@ -506,24 +572,34 @@ function PlatformAuthCard({ name, isConnected, total, activeViews, logoBg, logoC
       </div>
       
       {isConnected ? (
-        <div className="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-[#e5edf5] dark:border-white/5">
-          <div className="flex flex-col">
-            <span className="text-[11px] text-[#64748d] dark:text-gray-500 uppercase font-bold tracking-wider">Всего объектов</span>
-            <span className="text-[16px] font-semibold text-[#061b31] dark:text-white mt-0.5">{total}</span>
+        <div className="flex flex-col">
+          <div className="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-[#e5edf5] dark:border-white/5 mb-3">
+            <div className="flex flex-col">
+              <span className="text-[11px] text-[#64748d] dark:text-gray-500 uppercase font-bold tracking-wider">Всего объектов</span>
+              <span className="text-[16px] font-semibold text-[#061b31] dark:text-white mt-0.5">{total}</span>
+            </div>
+            <div className="flex flex-col">
+               <span className="text-[11px] text-[#64748d] dark:text-gray-500 uppercase font-bold tracking-wider">Просмотров за 30 дн.</span>
+               <span className="text-[16px] font-semibold text-[#061b31] dark:text-white mt-0.5">{activeViews}</span>
+            </div>
           </div>
-          <div className="flex flex-col">
-             <span className="text-[11px] text-[#64748d] dark:text-gray-500 uppercase font-bold tracking-wider">Просмотров за 30 дн.</span>
-             <span className="text-[16px] font-semibold text-[#061b31] dark:text-white mt-0.5">{activeViews}</span>
-          </div>
+          <button 
+            onClick={handleRemove}
+            disabled={isLoading}
+            className="w-full bg-[#f6f9fc] text-[#ff4264] dark:bg-red-500/10 dark:text-red-400 px-4 py-2 rounded-lg text-sm font-semibold active:scale-95 transition-all text-center border border-red-500/10 disabled:opacity-50"
+          >
+            {isLoading ? "Удаление..." : "Удалить сессию"}
+          </button>
         </div>
       ) : (
         <div className="mt-2 pt-3 border-t border-[#e5edf5] dark:border-white/5 flex gap-2">
-          <input 
-            type="text" 
-            placeholder="Логин" 
-            className="flex-1 bg-[#f6f9fc] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/10 rounded-lg px-3 py-2 text-sm text-[#061b31] dark:text-white focus:outline-none focus:border-[#533afd]"
-          />
-          <button className="bg-[#533afd] text-white px-4 py-2 rounded-lg text-sm font-semibold active:scale-95 transition-transform">Войти</button>
+          <button 
+            onClick={handleAuth}
+            disabled={isLoading}
+            className="w-full bg-[#533afd] text-white px-4 py-2.5 rounded-lg text-sm font-semibold active:scale-95 transition-transform flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {isLoading ? "Ожидание входа..." : "Авторизация"}
+          </button>
         </div>
       )}
     </div>
