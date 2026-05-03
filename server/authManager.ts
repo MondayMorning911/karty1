@@ -63,14 +63,14 @@ export class AuthManager {
           const response = await fetch('http://72.56.1.59:3001/json/list?token=KartyMustPassword');
           if (response.ok) {
             const targets = await response.json();
-            // find the target that belongs to our browser context/page if possible, or just the latest page
+            // find the target that belongs to our browser context/page if possible
             const targetSession = targets.find((t: any) => t.type === 'page' && t.url && t.url !== 'about:blank');
             if (targetSession && targetSession.devtoolsFrontendUrl) {
-              // The devtools URL from browserless might be a relative path or contain ws://
+              const sessionId = targetSession.id;
+              // Provide the DevTools inspector URL which actually exists on the server
               let debugUrl = targetSession.devtoolsFrontendUrl;
               if (debugUrl.startsWith('/devtools/')) {
                  debugUrl = `http://72.56.1.59:3001${debugUrl}&token=KartyMustPassword`;
-                 // Note: Replace ws= with wss= if needed, though http:// implies ws= is fine.
               }
               interactiveUrl = debugUrl;
               console.log("[AuthManager] Found DevTools URL:", interactiveUrl);
