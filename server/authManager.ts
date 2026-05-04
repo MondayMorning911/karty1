@@ -18,139 +18,83 @@ const BROWSERLESS_DEBUG_URL = 'http://72.56.1.59:3001/?token=KartyMustPassword';
 
 export class AuthManager {
   static async startSession(userId: string, platform: 'ssge' | 'myhome' | 'realting' | 'korter') {
-    console.log(`[AuthManager] Starting browserless session for ${platform} (User: ${userId})`);
-
-    const trackingId = `${userId}_${Date.now()}`;
-    const wsUrl = `${BROWSERLESS_WS_URL}&trackingId=${trackingId}`;
+    console.log(`[AuthManager] Starting VPS session for ${platform} (User: ${userId})`);
 
     try {
-      // Connect to Browserless
-      const browser = await chromium.connectOverCDP(wsUrl);
-      
-      const context = browser.contexts()[0] || await browser.newContext({
-        viewport: { width: 1280, height: 720 },
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      // Подключаемся к VPS Orchestrator
+      const response = await fetch(`${ORCHESTRATOR_URL}/start-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, platform, proxy: '' })
       });
+
+      const data = await response.json();
       
-      const page = await context.newPage();
-
-      // Navigate to the respective login page, but do not block the API response
-      switch (platform) {
-        case 'ssge':
-          page.goto('https://ss.ge/ru/real-estate/Login', { timeout: 60000 }).catch(e => console.error(e));
-          break;
-        case 'myhome':
-          page.goto('https://www.myhome.ge/ru/login', { timeout: 60000 }).catch(e => console.error(e));
-          break;
-        case 'realting':
-          page.goto('https://realting.com/ru/login', { timeout: 60000 }).catch(e => console.error(e));
-          break;
-        case 'korter':
-          page.goto('https://korter.ge/ru/', { timeout: 60000, waitUntil: 'domcontentloaded' }).catch(e => console.error(e));
-          break;
-        default:
-          throw new Error('Unknown platform: ' + platform);
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start session on VPS');
       }
 
-      // Start watching for login in the background
-      this.watchForLogin(page, context, userId, platform, browser);
-
-      // Wait briefly for Browserless to register the session (retry up to 3 times)
-      let interactiveUrl = BROWSERLESS_DEBUG_URL;
-      for (let i = 0; i < 3; i++) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        try {
-          const response = await fetch('http://72.56.1.59:3001/json/list?token=KartyMustPassword');
-          if (response.ok) {
-            const targets = await response.json();
-            // find the target that belongs to our browser context/page if possible
-            const targetSession = targets.find((t: any) => t.type === 'page' && t.url && t.url !== 'about:blank');
-            if (targetSession && targetSession.devtoolsFrontendUrl) {
-              const sessionId = targetSession.id;
-              // Provide the DevTools inspector URL which actually exists on the server
-              let debugUrl = targetSession.devtoolsFrontendUrl;
-              if (debugUrl.startsWith('/devtools/')) {
-                 debugUrl = `http://72.56.1.59:3001${debugUrl}&token=KartyMustPassword`;
-              }
-              interactiveUrl = debugUrl;
-              console.log("[AuthManager] Found DevTools URL:", interactiveUrl);
-              break;
-            }
-          }
-        } catch (err: any) {
-          console.error('[AuthManager] Error fetching json list:', err.message);
-        }
-      }
-
-      // Return the interactive URL so the user can open it in iframe
-      return { interactiveUrl };
+      console.log(`[AuthManager] VPS Session created: ${data.sessionId}, VNC: ${data.novncUrl}`);
+      
+      return { 
+        interactiveUrl: data.novncUrl,
+        sessionId: data.sessionId
+      };
     } catch (error: any) {
-      console.error(`[AuthManager] Failed to start session:`, error.message);
+      console.error(`[AuthManager] Failed to start VPS session:`, error.message);
       throw error;
     }
   }
 
-  static async watchForLogin(page: Page, context: BrowserContext, userId: string, platform: string, browser: any) {
-    let isSuccess = false;
-    let timeoutId: NodeJS.Timeout;
-
-    // 5 minutes timeout
-    const timeoutPromise = new Promise((resolve) => {
-      timeoutId = setTimeout(() => {
-        resolve('timeout');
-      }, 5 * 60 * 1000);
-    });
-
+  // Called when user clicks "I'm logged in"
+  static async saveSession(userId: string, platform: string, sessionId: string) {
     try {
-      const waitPromise = (async () => {
-        switch (platform) {
-          case 'ssge':
-            await page.waitForURL(/^https:\/\/(home\.)?ss\.ge.*/);
-            break;
-          case 'myhome':
-            await page.waitForFunction(() => {
-              return window.location.href.includes('myhome.ge') && !window.location.href.includes('login');
-            });
-            break;
-          case 'realting':
-            await page.waitForURL((url) => !url.href.includes('/login'));
-            break;
-          case 'korter':
-            await page.waitForSelector('.user-avatar, .profile-menu', { state: 'visible' });
-            break;
-        }
-        return 'success';
-      })();
+      console.log(`[AuthManager] Saving session for ${platform} via VPS Orchestrator...`);
+      
+      const res = await fetch(`${ORCHESTRATOR_URL}/check-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      });
 
-      const result = await Promise.race([waitPromise, timeoutPromise]);
-
-      if (result === 'success') {
-        isSuccess = true;
-        console.log(`[AuthManager] Login successful on ${platform}. Saving storage state...`);
-        const storageState = await context.storageState();
-
-        // user wants it at: users/${userId}/sessions/${platform}
-        await db.doc(`users/${userId}/sessions/${platform}`).set({
-          state: storageState,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        
-        // Also save to the original path used by the UI just in case
-        await db.doc(`sessions/${userId}/platforms/${platform}`).set({
-          state: storageState,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
-        console.log(`[AuthManager] Session saved successfully for ${platform}`);
-      } else {
-        console.log(`[AuthManager] Timeout reached for ${platform} authorization.`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to fetch session state');
       }
-    } catch (error: any) {
-      console.error(`[AuthManager] Error watching login for ${platform}:`, error.message);
-    } finally {
-      clearTimeout(timeoutId!);
-      await context.close().catch(() => {});
-      await browser.close().catch(() => {});
+
+      const { storageState, localStorage } = data;
+      
+      if (!storageState) {
+        throw new Error('No storage state returned from VPS');
+      }
+
+      // Сохраняем в Firestore
+      await db.doc(`users/${userId}/sessions/${platform}`).set({
+        state: storageState,
+        localStorage: localStorage || {}, // сохраняем если есть
+        sessionId: sessionId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      await db.doc(`sessions/${userId}/platforms/${platform}`).set({
+        state: storageState,
+        localStorage: localStorage || {},
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      
+      console.log(`[AuthManager] Session saved successfully for ${platform}. Stopping container...`);
+
+      // Останавливаем контейнер
+      fetch(`${ORCHESTRATOR_URL}/stop-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      }).catch(e => console.error("Error stopping container:", e));
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("[AuthManager] Save session error:", err.message);
+      throw err;
     }
   }
 }

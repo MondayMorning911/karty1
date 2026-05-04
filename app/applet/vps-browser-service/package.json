@@ -1,0 +1,13 @@
+{
+  "name": "vps-browser-service",
+  "version": "1.0.0",
+  "description": "Remote browser orchestrator via Docker and noVNC",
+  "main": "orchestrator.js",
+  "scripts": {
+    "start": "node orchestrator.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "playwright-core": "^1.44.0"
+  }
+}

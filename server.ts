@@ -72,12 +72,27 @@ async function startServer() {
 
     try {
       console.log(`[API] AuthManager StartSession...`);
-      const { interactiveUrl } = await AuthManager.startSession(userId, siteKey as any);
-      console.log(`[API] AuthManager success. URL: ${interactiveUrl}`);
+      const { interactiveUrl, sessionId } = await AuthManager.startSession(userId, siteKey as any);
+      console.log(`[API] AuthManager success. URL: ${interactiveUrl}, SessionID: ${sessionId}`);
       
-      res.json({ success: true, interactiveUrl });
+      res.json({ success: true, interactiveUrl, sessionId });
     } catch (error: any) {
       console.error('[API] /api/auth/capture Error:', error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Save Session API manually
+  app.post('/api/auth/save-session', async (req, res) => {
+    const { userId, siteKey, sessionId } = req.body;
+    if (!userId || !siteKey || !sessionId) {
+      return res.status(400).json({ error: 'userId, siteKey, sessionId are required' });
+    }
+
+    try {
+      await AuthManager.saveSession(userId, siteKey, sessionId);
+      res.json({ success: true });
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });

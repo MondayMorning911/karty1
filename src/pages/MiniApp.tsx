@@ -443,7 +443,8 @@ function CreateTab() {
 
 function PlatformsTab() {
   const [sessions, setSessions] = useState<Record<string, any>>({});
-  const [interactiveUrl, setInteractiveUrl] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<{url: string, sessionId: string, siteKey: string} | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -499,13 +500,48 @@ function PlatformsTab() {
       }
       
       const data = await response.json();
-      if (data.interactiveUrl) {
-        setInteractiveUrl(data.interactiveUrl);
+      if (data.interactiveUrl && data.sessionId) {
+        setActiveSession({ url: data.interactiveUrl, sessionId: data.sessionId, siteKey });
       } else if (data.error) {
         alert('Ошибка API: ' + data.error);
       }
     } catch (e: any) {
       alert('Сетевая ошибка или сбой: ' + e.message);
+    }
+  };
+
+  const handleSaveSession = async () => {
+    if (!activeSession) return;
+    try {
+      setIsSaving(true);
+      let user = auth.currentUser;
+      const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+      const fallbackUserId = tgUser ? String(tgUser.id) : 'anonymous_user';
+
+      const response = await fetch('/api/auth/save-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: user ? user.uid : fallbackUserId, 
+          siteKey: activeSession.siteKey,
+          sessionId: activeSession.sessionId
+        })
+      });
+      
+      if (!response.ok) {
+        let errorMsg = `HTTP Error: ${response.status} ${response.statusText}`;
+        try {
+          const errData = await response.json();
+          if (errData && errData.error) errorMsg = errData.error;
+        } catch (e) {}
+        throw new Error(errorMsg);
+      }
+      
+      setActiveSession(null); // Закрываем модалку после успеха
+    } catch (e: any) {
+      alert('Ошибка при сохранении сессии: ' + e.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -551,26 +587,25 @@ function PlatformsTab() {
 
   return (
     <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
-      {interactiveUrl && (
+      {activeSession && (
         <div className="absolute inset-0 z-[100] bg-[#f7f9fc] dark:bg-[#050505] flex flex-col">
           <div className="p-4 flex items-center justify-between border-b border-[#e5edf5] dark:border-white/10 bg-white dark:bg-[#0F0F0F]">
             <div className="flex flex-col">
               <h3 className="font-bold text-[16px]">Авторизация</h3>
-              <span className="text-xs text-gray-400 text-left max-w-[200px]">Авторизуйтесь ниже. Если не грузится, нажмите "В браузере" (Cannot GET означает, что сессия не найдена/закрыта)</span>
+              <span className="text-xs text-gray-400 text-left max-w-[200px]">Войдите в аккаунт и нажмите "Я вошел ✅"</span>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => {
-                const tg = (window as any).Telegram?.WebApp;
-                if (tg && tg.openLink) {
-                  tg.openLink(interactiveUrl);
-                } else {
-                  window.open(interactiveUrl, '_blank');
-                }
-              }} className="px-3 py-1.5 bg-[#533afd]/10 text-[#533afd] rounded-lg text-sm font-semibold">В браузере</button>
-              <button onClick={() => setInteractiveUrl(null)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-sm font-semibold">Закрыть</button>
+              <button 
+                onClick={handleSaveSession} 
+                disabled={isSaving}
+                className="px-3 py-1.5 bg-[#15be53] hover:bg-[#12a849] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {isSaving ? "Сохраняем..." : "Я вошел ✅"}
+              </button>
+              <button onClick={() => setActiveSession(null)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-sm font-semibold">Х</button>
             </div>
           </div>
-          <iframe src={interactiveUrl} className="flex-1 w-full border-none" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
+          <iframe src={activeSession.url} className="flex-1 w-full border-none bg-white" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
         </div>
       )}
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/15 blur-[80px] rounded-full pointer-events-none" />
