@@ -16,6 +16,8 @@ const db = getFirestore();
 const BROWSERLESS_WS_URL = 'ws://72.56.1.59:3001/chromium?token=KartyMustPassword';
 const BROWSERLESS_DEBUG_URL = 'http://72.56.1.59:3001/?token=KartyMustPassword';
 
+const ORCHESTRATOR_URL = 'http://72.56.1.59:8080';
+
 export class AuthManager {
   static async startSession(userId: string, platform: 'ssge' | 'myhome' | 'realting' | 'korter') {
     console.log(`[AuthManager] Starting VPS session for ${platform} (User: ${userId})`);

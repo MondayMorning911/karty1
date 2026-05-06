@@ -12,7 +12,7 @@ app.use(express.json());
 const sessions = {};
 
 const PORT = 8080;
-const EXTERNAL_IP = 'ТУТ_IP_ТВОЕГО_РФ_СЕРВЕРА'; // Нужно будет заменить!
+const EXTERNAL_IP = '72.56.1.59'; // Обновлено на твой IP
 const DOCKER_IMAGE = 'remote-browser:latest';
 
 // Вспомогательная функция для запуска shell команд
