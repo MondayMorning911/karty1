@@ -52,8 +52,9 @@ app.post('/start-session', async (req, res) => {
         }
 
         if (!cdpUp) {
-            const logs = await runShell(`docker logs ${containerName} --tail 20`).catch(() => 'no logs');
-            throw new Error(`Chromium CDP did not start in time inside container on port ${cdpPort}. Logs: ${logs}`);
+            const chromeLog = await runShell(`docker exec ${containerName} cat /tmp/chrome.log`).catch(() => 'no chrome log');
+            const dockerLogs = await runShell(`docker logs ${containerName} --tail 20`).catch(() => 'no docker logs');
+            throw new Error(`Chromium CDP did not start in time inside container on port ${cdpPort}.\nChrome Log: ${chromeLog}\nDocker logs: ${dockerLogs}`);
         }
         
         console.log(`[${sessionId}] Connecting Playwright to CDP port ${cdpPort}...`);
