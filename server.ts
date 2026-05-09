@@ -51,6 +51,8 @@ $CHROME_BIN --no-sandbox \\
          --window-size=1280,800 \\
          $PROXY_ARGS > /tmp/chrome.log 2>&1 &
 
+socat TCP-LISTEN:9223,fork,bind=0.0.0.0 TCP:127.0.0.1:9222 &
+
 sleep 2
 echo "Chrome log output:"
 cat /tmp/chrome.log
@@ -96,7 +98,7 @@ app.post('/start-session', async (req, res) => {
     
     try {
         console.log(\`[\${sessionId}] Starting container...\`);
-        await runShell(\`docker run -d --name \${containerName} -p \${vncPort}:6080 -p \${cdpPort}:9222 --shm-size=1gb \${proxyEnv} \${DOCKER_IMAGE}\`);
+        await runShell(\`docker run -d --name \${containerName} -p \${vncPort}:6080 -p \${cdpPort}:9223 --shm-size=1gb \${proxyEnv} \${DOCKER_IMAGE}\`);
             
         sessions[sessionId] = { containerName, vncPort, cdpPort, platform, userId, createdAt: Date.now() };
         
@@ -208,6 +210,19 @@ ${orchJs}
 EOFJS
 
 chmod +x /root/vps-browser-service/image/start.sh
+
+cat << 'EOF' > /root/vps-browser-service/image/Dockerfile
+FROM mcr.microsoft.com/playwright:v1.44.0-jammy
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+RUN apt-get update && apt-get install -y \\
+    xvfb x11vnc fluxbox novnc websockify socat \\
+    && rm -rf /var/lib/apt/lists/*
+ENV DISPLAY=:99
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+CMD ["/start.sh"]
+EOF
 
 cd /root/vps-browser-service/image
 echo "Building docker image..."
