@@ -1,12 +1,12 @@
 import { chromium } from 'playwright';
-import { getFirestore } from 'firebase-admin/firestore';
-import * as admin from 'firebase-admin';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { initializeApp, getApps } from 'firebase-admin/app';
 import type { Page, BrowserContext } from 'playwright-core';
 
 // Ensure Firebase is initialized
-if (!admin.apps.length) {
+if (!getApps().length) {
   try {
-    admin.initializeApp();
+    initializeApp();
   } catch (e: any) {
     console.error("Firebase admin initialization warning:", e.message);
   }
@@ -75,13 +75,13 @@ export class AuthManager {
         state: storageState,
         localStorage: localStorage || {}, // сохраняем если есть
         sessionId: sessionId,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
       await db.doc(`sessions/${userId}/platforms/${platform}`).set({
         state: storageState,
         localStorage: localStorage || {},
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
       
       console.log(`[AuthManager] Session saved successfully for ${platform}. Stopping container...`);
