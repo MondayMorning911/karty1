@@ -12,7 +12,7 @@ chromium.use(stealthPlugin());
 // Ensure Firebase is initialized
 if (!getApps().length) {
   try {
-    initializeApp();
+    initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'karty-app' });
   } catch (e: any) {
     console.error("Firebase admin initialization warning:", e.message);
   }
@@ -57,6 +57,16 @@ export class AuthManager {
       
       const page = await context.newPage();
       
+      // Блокируем лишние ресурсы для ускорения загрузки
+      await page.route('**/*', (route) => {
+        const type = route.request().resourceType();
+        if (['image', 'font', 'media', 'stylesheet'].includes(type)) {
+          route.abort();
+        } else {
+          route.continue();
+        }
+      });
+
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
       const typeWithDelay = async (locator: string, text: string) => {
         for (const char of text) {
@@ -65,7 +75,7 @@ export class AuthManager {
       };
 
       console.log(`[AuthManager] Navigating to ${targetUrl}`);
-      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.goto(targetUrl, { waitUntil: 'commit', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
 
       // Handle specific platform logins
       if (platform === 'ssge') {
@@ -84,7 +94,8 @@ export class AuthManager {
         await page.click('button.primary-btn');
         
         // Wait for successful redirect back to home.ss.ge
-        await page.waitForURL('**/home.ss.ge/**', { timeout: 15000 });
+        await page.waitForURL('**/home.ss.ge/**', { waitUntil: 'commit', timeout: 15000 }).catch(e => console.warn('ssge waitForURL:', e.message));
+        await delay(2000);
       } else if (platform === 'myhome') {
         // auth.tnet.ge
         await page.waitForSelector('#_r_m_', { timeout: 10000 });
@@ -102,7 +113,8 @@ export class AuthManager {
         await page.click('button.bg-blue-100.hover\\:bg-blue-110');
 
         // wait for successful login redirect
-        await page.waitForURL('**/myhome.ge/**', { timeout: 15000 });
+        await page.waitForURL('**/myhome.ge/**', { waitUntil: 'commit', timeout: 15000 }).catch(e => console.warn('myhome waitForURL:', e.message));
+        await delay(2000);
       } else if (platform === 'realting') {
         await page.waitForSelector('#loginform-username', { timeout: 10000 });
         await page.click('#loginform-username');

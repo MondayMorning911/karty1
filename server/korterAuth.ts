@@ -53,6 +53,16 @@ export const korterAuthManager = {
 
       const page = await context.newPage();
 
+      // Блокируем лишние ресурсы для ускорения загрузки
+      await page.route('**/*', (route) => {
+        const type = route.request().resourceType();
+        if (['image', 'font', 'media', 'stylesheet'].includes(type)) {
+          route.abort();
+        } else {
+          route.continue();
+        }
+      });
+
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
       const typeWithDelay = async (locator: string, text: string) => {
         for (const char of text) {
@@ -60,7 +70,7 @@ export const korterAuthManager = {
         }
       };
 
-      await page.goto('https://korter.ge/ru');
+      await page.goto('https://korter.ge/ru', { waitUntil: 'commit', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
       
       // Wait for login button and click
       await page.waitForSelector('div.s1ipb8ld', { timeout: 10000 });
