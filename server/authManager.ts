@@ -1,7 +1,6 @@
-import { chromium } from 'playwright';
+import puppeteer from 'puppeteer-core';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
-import type { Page, BrowserContext } from 'playwright-core';
 
 // Ensure Firebase is initialized
 if (!getApps().length) {
@@ -21,10 +20,10 @@ export class AuthManager {
     console.log(`[AuthManager] Starting Cloud Steel session for ${platform} (User: ${userId})`);
 
     let targetUrl = 'https://example.com';
-    if (platform === 'myhome') targetUrl = 'https://www.myhome.ge/';
-    if (platform === 'ssge') targetUrl = 'https://ss.ge/ru';
-    if (platform === 'korter') targetUrl = 'https://korter.ge/';
-    if (platform === 'realting') targetUrl = 'https://realting.com/ru/';
+    if (platform === 'myhome') targetUrl = 'https://auth.tnet.ge/ru/user/login/?Continue=https://www.myhome.ge/';
+    if (platform === 'ssge') targetUrl = 'https://account.ss.ge/ka/account/login?returnUrl=%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3Dssweb%26scope%3Dbanners%2520files%2520house_api%2520offline_access%2520openid%2520paid_services%2520profile%2520real_estate%2520statistics%2520user_registration%2520web_apigateway%26response_type%3Dcode%26redirect_uri%3Dhttps%253A%252F%252Fhome.ss.ge%252Fapi%252Fauth%252Fcallback%252Fidentity-server4%26authority%3Dhttps%253A%252F%252Faccount.ss.ge%26post_logout_redirect_uri%3Dhttps%253A%252F%252Fhome.ss.ge%26response_mode%3Dquery%26code_challenge%3DQlEwHPQ_sdS-Rka6pg4x-_HwCJm34R0o6Wsy928y7fs%26code_challenge_method%3DS256';
+    if (platform === 'korter') targetUrl = 'https://korter.ge/ru/';
+    if (platform === 'realting') targetUrl = 'https://realting.com/ru/login';
 
     try {
       const response = await fetch(STEEL_API_URL, {
@@ -39,9 +38,7 @@ export class AuthManager {
           headless: false,
           dimensions: { width: 375, height: 812 },
           deviceConfig: { device: 'mobile' },
-          debugConfig: { interactive: true },
-          sessionConfig: { navigateUrl: targetUrl },
-          url: targetUrl
+          debugConfig: { interactive: true }
         })
       });
 
@@ -53,8 +50,19 @@ export class AuthManager {
       const sessionId = session.id;
       console.log(`[AuthManager] Steel Session created: ${sessionId}`);
 
-      // We don't use Playwright to connect and navigate.
-      // Steel does not have a "browserContext.urls" field? Actually it's probably "browserContext" or just "url", Wait! The user previously said "body: JSON.stringify({ url: ... })" but wait, does it work? Wait, I will just try sending both.
+      // connect and navigate using puppeteer
+      try {
+        const browser = await puppeteer.connect({
+          browserWSEndpoint: `wss://connect.steel.dev?sessionId=${sessionId}&apiKey=${STEEL_API_KEY}`
+        });
+        const pages = await browser.pages();
+        const page = pages.length > 0 ? pages[0] : await browser.newPage();
+        console.log(`[AuthManager] Navigating to ${targetUrl}`);
+        await page.goto(targetUrl);
+        await browser.disconnect();
+      } catch (err: any) {
+         console.error('Puppeteer navigation error:', err.message);
+      }
 
       return { 
         interactiveUrl: session.debugUrl,
@@ -85,26 +93,37 @@ export class AuthManager {
       let localStorageData = {};
       
       try {
-        const wsUrl = `wss://connect.steel.dev?sessionId=${sessionId}`;
-        const browser = await chromium.connectOverCDP(wsUrl);
-        const context = browser.contexts()[0];
+        const wsUrl = `wss://connect.steel.dev?sessionId=${sessionId}&apiKey=${STEEL_API_KEY}`;
+        const browser = await puppeteer.connect({ browserWSEndpoint: wsUrl });
+        const pages = await browser.pages();
+        const page = pages[0];
         
-        if (context) {
-           pwStorageState = await context.storageState();
-           const page = context.pages()[0];
-           if (page) {
-             localStorageData = await page.evaluate(() => {
-                let data: any = {};
-                for(let i=0; i<localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (key) data[key] = localStorage.getItem(key);
-                }
-                return data;
-             }).catch(() => ({}));
-           }
+        if (page) {
+           const cookies = await page.cookies();
+           pwStorageState.cookies = cookies as any;
+           
+           localStorageData = await page.evaluate(() => {
+              let data: Record<string, string> = {};
+              for(let i=0; i<localStorage.length; i++) {
+                  const key = localStorage.key(i);
+                  if (key) {
+                      const val = localStorage.getItem(key);
+                      if (val !== null) data[key] = val;
+                  }
+              }
+              return data;
+           }).catch((e) => {
+              console.error("Local storage extract error:", e);
+              return {};
+           });
+           
+           pwStorageState.origins = [{
+               origin: new URL(page.url()).origin || `https://${platform}.ge`,
+               localStorage: Object.entries(localStorageData).map(([name, value]) => ({name, value})) as any
+           }] as any;
         }
-        browser.disconnect();
-      } catch (e) {
+        await browser.disconnect();
+      } catch (e: any) {
         console.warn('Fallback to Steel Context due to CDP fail', e);
         pwStorageState = {
            cookies: sessionState.cookies || [],
