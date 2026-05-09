@@ -154,6 +154,26 @@ echo "Steel Browser is running on port 8080"
     }
   });
 
+  // Release Steel Session
+  app.post('/api/auth/release', async (req, res) => {
+    const { sessionId } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+
+    try {
+      console.log(`[API] Releasing session manually: ${sessionId}`);
+      await fetch(`https://api.steel.dev/v1/sessions/${sessionId}/release`, {
+         method: 'POST',
+         headers: { 'steel-api-key': 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6' }
+      });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[API] /api/auth/release Error:', error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Parse Listing with deepseek
   app.post('/api/parse-listing', async (req, res) => {
     const { text, styleId } = req.body;
@@ -184,7 +204,9 @@ echo "Steel Browser is running on port 8080"
 
   httpServer.on('upgrade', (req, socket, head) => {
     if (req.url && req.url.startsWith('/novnc')) {
-      novncProxy.upgrade(req, socket, head);
+      if (typeof steelProxy.upgrade === 'function') {
+         steelProxy.upgrade(req as any, socket as any, head);
+      }
     }
   });
 }

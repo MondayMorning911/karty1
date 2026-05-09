@@ -1,6 +1,7 @@
-import puppeteer from 'puppeteer-core';
+import { chromium } from 'playwright';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
+import type { Page, BrowserContext } from 'playwright-core';
 
 // Ensure Firebase is initialized
 if (!getApps().length) {
@@ -47,21 +48,28 @@ export class AuthManager {
       }
       
       const session = await response.json();
+      if (!session || !session.id) {
+         throw new Error('Failed to create session: ' + JSON.stringify(session));
+      }
       const sessionId = session.id;
       console.log(`[AuthManager] Steel Session created: ${sessionId}`);
 
-      // connect and navigate using puppeteer
+      // connect and navigate using playwright
       try {
-        const browser = await puppeteer.connect({
-          browserWSEndpoint: `wss://connect.steel.dev?sessionId=${sessionId}&apiKey=${STEEL_API_KEY}`
+        const browser = await chromium.connectOverCDP(`wss://connect.steel.dev?sessionId=${sessionId}&apiKey=${STEEL_API_KEY}`);
+        const contexts = browser.contexts();
+        const context = contexts.length > 0 ? contexts[0] : await browser.newContext();
+        await context.addInitScript(() => {
+          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         });
-        const pages = await browser.pages();
-        const page = pages.length > 0 ? pages[0] : await browser.newPage();
+        const pages = context.pages();
+        const page = pages.length > 0 ? pages[0] : await context.newPage();
+        
         console.log(`[AuthManager] Navigating to ${targetUrl}`);
-        await page.goto(targetUrl);
-        await browser.disconnect();
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await browser.close();
       } catch (err: any) {
-         console.error('Puppeteer navigation error:', err.message);
+         console.error('Playwright navigation error:', err.message);
       }
 
       return { 
@@ -94,35 +102,39 @@ export class AuthManager {
       
       try {
         const wsUrl = `wss://connect.steel.dev?sessionId=${sessionId}&apiKey=${STEEL_API_KEY}`;
-        const browser = await puppeteer.connect({ browserWSEndpoint: wsUrl });
-        const pages = await browser.pages();
-        const page = pages[0];
+        const browser = await chromium.connectOverCDP(wsUrl);
+        const contexts = browser.contexts();
+        const context = contexts.length > 0 ? contexts[0] : null;
         
-        if (page) {
-           const cookies = await page.cookies();
-           pwStorageState.cookies = cookies as any;
+        if (context) {
+           pwStorageState = await context.storageState();
+           const pages = context.pages();
+           const page = pages.length > 0 ? pages[0] : null;
            
-           localStorageData = await page.evaluate(() => {
-              let data: Record<string, string> = {};
-              for(let i=0; i<localStorage.length; i++) {
-                  const key = localStorage.key(i);
-                  if (key) {
-                      const val = localStorage.getItem(key);
-                      if (val !== null) data[key] = val;
-                  }
-              }
-              return data;
-           }).catch((e) => {
-              console.error("Local storage extract error:", e);
-              return {};
-           });
-           
-           pwStorageState.origins = [{
-               origin: new URL(page.url()).origin || `https://${platform}.ge`,
-               localStorage: Object.entries(localStorageData).map(([name, value]) => ({name, value})) as any
-           }] as any;
+           if (page) {
+             localStorageData = await page.evaluate(() => {
+                let data: Record<string, string> = {};
+                for(let i=0; i<localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key) {
+                        const val = localStorage.getItem(key);
+                        if (val !== null) data[key] = val;
+                    }
+                }
+                return data;
+             }).catch((e) => {
+                console.error("Local storage extract error:", e);
+                return {};
+             });
+             
+             // Save origin localstorage in playwright state format
+             pwStorageState.origins = [{
+                 origin: new URL(page.url()).origin || `https://${platform}.ge`,
+                 localStorage: Object.entries(localStorageData).map(([name, value]) => ({name, value})) as any
+             }] as any;
+           }
         }
-        await browser.disconnect();
+        await browser.close();
       } catch (e: any) {
         console.warn('Fallback to Steel Context due to CDP fail', e);
         pwStorageState = {
@@ -133,6 +145,17 @@ export class AuthManager {
            }]
         };
         localStorageData = sessionState.localStorage || {};
+      }
+
+      // Explicitly release session
+      try {
+         await fetch(`${STEEL_API_URL}/${sessionId}/release`, {
+            method: 'POST',
+            headers: { 'steel-api-key': STEEL_API_KEY }
+         });
+         console.log(`[AuthManager] Released session ${sessionId}`);
+      } catch (e) {
+         console.error('[AuthManager] Failed to release session', e);
       }
 
       // Сохраняем в Firestore

@@ -510,6 +510,22 @@ function PlatformsTab() {
     }
   };
 
+  const handleCloseSession = async () => {
+    if (activeSession) {
+      try {
+        // Stop the session in background
+        fetch('/api/auth/release', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ sessionId: activeSession.sessionId })
+        }).catch(err => console.error("Release error:", err));
+      } catch (e) {
+        console.error('Failed to release session', e);
+      }
+    }
+    setActiveSession(null);
+  };
+
   const handleSaveSession = async () => {
     if (!activeSession) return;
     try {
@@ -602,7 +618,13 @@ function PlatformsTab() {
               >
                 {isSaving ? "Сохраняем..." : "Я вошел ✅"}
               </button>
-              <button onClick={() => setActiveSession(null)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-sm font-semibold">Х</button>
+              <button 
+                onClick={handleCloseSession} 
+                disabled={isSaving}
+                className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-sm font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+               >
+                Х
+               </button>
             </div>
           </div>
           <iframe src={activeSession.url} className="flex-1 w-full border-none bg-white" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
