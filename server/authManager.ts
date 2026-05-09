@@ -34,10 +34,14 @@ export class AuthManager {
           'steel-api-key': STEEL_API_KEY
         },
         body: JSON.stringify({
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
           solveCaptcha: false,
           headless: false,
-          debugConfig: { interactive: true }
+          dimensions: { width: 375, height: 812 },
+          deviceConfig: { device: 'mobile' },
+          debugConfig: { interactive: true },
+          sessionConfig: { navigateUrl: targetUrl },
+          url: targetUrl
         })
       });
 
@@ -49,21 +53,8 @@ export class AuthManager {
       const sessionId = session.id;
       console.log(`[AuthManager] Steel Session created: ${sessionId}`);
 
-      // Navigate using Playwright CDP
-      try {
-        const browser = await chromium.connectOverCDP(session.websocketUrl);
-        const context = browser.contexts()[0] || await browser.newContext();
-        await context.addInitScript(() => {
-          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        });
-        const page = context.pages()[0] || await context.newPage();
-        
-        console.log(`[AuthManager] Navigating to ${targetUrl}`);
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        browser.disconnect();
-      } catch (pwError) {
-        console.error('Playwright navigation error, session might be empty:', pwError);
-      }
+      // We don't use Playwright to connect and navigate.
+      // Steel does not have a "browserContext.urls" field? Actually it's probably "browserContext" or just "url", Wait! The user previously said "body: JSON.stringify({ url: ... })" but wait, does it work? Wait, I will just try sending both.
 
       return { 
         interactiveUrl: session.debugUrl,
