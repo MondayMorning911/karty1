@@ -7,6 +7,7 @@ import { startBot } from './server/bot.js';
 import { parseListingWithDeepSeek } from './server/ai.js';
 import { AuthManager } from './server/authManager.js';
 import { getFirestore } from 'firebase-admin/firestore';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 async function startServer() {
   const app = express();
@@ -14,6 +15,24 @@ async function startServer() {
 
   app.use(cors());
   app.use(express.json());
+
+  // Proxy noVNC requests to fix mixed content (supports HTTP and WebSockets)
+  const novncProxy = createProxyMiddleware({
+    router: function(req) {
+      const match = req.url.match(/^\/novnc\/(\d+)/);
+      if (match) return `http://72.56.1.59:${match[1]}`;
+      return `http://72.56.1.59`;
+    },
+    changeOrigin: true,
+    ws: true,
+    pathRewrite: function(path, req) {
+      const match = path.match(/^\/novnc\/(\d+)(.*)/);
+      if (match) return match[2] || '/';
+      return path;
+    }
+  });
+
+  app.use('/novnc', novncProxy);
 
   // Init Telegram Bot
   startBot();
@@ -51,7 +70,7 @@ $CHROME_BIN --no-sandbox \\
          --window-size=1280,800 \\
          $PROXY_ARGS > /tmp/chrome.log 2>&1 &
 
-socat TCP-LISTEN:9223,fork,bind=0.0.0.0 TCP:127.0.0.1:9222 &
+socat TCP-LISTEN:9223,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9222 &
 
 sleep 2
 echo "Chrome log output:"
@@ -104,10 +123,10 @@ app.post('/start-session', async (req, res) => {
         
         let cdpUp = false;
         console.log(\`[\${sessionId}] Waiting for CDP to be available on port \${cdpPort}...\`);
-        for(let i=0; i<15; i++) {
+        for(let i=0; i<30; i++) {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1000);
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
                 const test = await fetch(\`http://127.0.0.1:\${cdpPort}/json/version\`, { signal: controller.signal });
                 clearTimeout(timeoutId);
                 if (test.ok) {
@@ -353,8 +372,14 @@ pm2 logs browser-orchestrator --lines 15
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    if (req.url && req.url.startsWith('/novnc')) {
+      novncProxy.upgrade(req, socket, head);
+    }
   });
 }
 

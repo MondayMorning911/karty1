@@ -38,8 +38,17 @@ export class AuthManager {
 
       console.log(`[AuthManager] VPS Session created: ${data.sessionId}, VNC: ${data.novncUrl}`);
       
+      // Extract port to use our HTTPS proxy
+      const portMatch = data.novncUrl.match(/:(\d{4,5})\/vnc\.html/);
+      const vncPort = portMatch ? portMatch[1] : '';
+      
+      let proxyUrl = data.novncUrl;
+      if (vncPort) {
+        proxyUrl = `/novnc/${vncPort}/vnc.html?autoconnect=true&resize=scale&path=novnc/${vncPort}/websockify`;
+      }
+      
       return { 
-        interactiveUrl: data.novncUrl,
+        interactiveUrl: proxyUrl,
         sessionId: data.sessionId
       };
     } catch (error: any) {
