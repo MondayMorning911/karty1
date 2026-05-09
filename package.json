@@ -18,6 +18,8 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^4.22.1",
+    "fingerprint-generator": "^2.1.82",
+    "fingerprint-injector": "^2.1.82",
     "firebase": "^10.11.1",
     "firebase-admin": "^13.8.0",
     "http-proxy-middleware": "^2.0.9",

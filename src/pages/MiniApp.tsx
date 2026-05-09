@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Camera, Star, X, Sparkles, FilePlus2, Layers, History, RefreshCcw, CheckCircle2, MoreVertical, Moon, Sun, ArrowRight, MapPin } from "lucide-react";
 import { KorterIcon, SSIcon, RealtingIcon, MyHomeIcon } from '../components/PlatformIcons';
 import { KorterAuth } from '../components/KorterAuth';
+import { PlatformLoginAuth } from '../components/PlatformLoginAuth';
 import Map, { Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { auth, db } from '../firebase';
@@ -443,8 +444,11 @@ function CreateTab() {
 
 function PlatformsTab() {
   const [sessions, setSessions] = useState<Record<string, any>>({});
-  const [activeSession, setActiveSession] = useState<{url: string, sessionId: string, siteKey: string} | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+  const fallbackUserId = tgUser ? String(tgUser.id) : 'anonymous_user';
+  const currentUserId = auth.currentUser ? auth.currentUser.uid : fallbackUserId;
+
+  const [activeSiteAuth, setActiveSiteAuth] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -460,105 +464,8 @@ function PlatformsTab() {
     return () => unsub();
   }, []);
 
-  const handleCaptureAuth = async (siteKey: string) => {
-    try {
-      let user = auth.currentUser;
-      const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
-      const fallbackUserId = tgUser ? String(tgUser.id) : 'anonymous_user';
-
-      if (!user) {
-        try {
-          const cred = await signInAnonymously(auth);
-          user = cred.user;
-        } catch (e: any) {
-          if (e.code === 'auth/admin-restricted-operation') {
-            alert('Ошибка: необходимо включить "Anonymous provider" (Анонимный вход) в Firebase Console -> Authentication -> Sign-in method.');
-          } else {
-            alert('Ошибка авторизации (Firebase): ' + e.message);
-          }
-          return;
-        }
-      }
-      
-      const response = await fetch('/api/auth/capture', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user ? user.uid : fallbackUserId, siteKey })
-      });
-      
-      if (!response.ok) {
-        let errorMsg = `HTTP Error: ${response.status} ${response.statusText}`;
-        try {
-          const errData = await response.json();
-          if (errData && errData.error) {
-            errorMsg = errData.error;
-          }
-        } catch (e) {
-          // ignore json parse error
-        }
-        throw new Error(errorMsg);
-      }
-      
-      const data = await response.json();
-      if (data.interactiveUrl && data.sessionId) {
-        setActiveSession({ url: data.interactiveUrl, sessionId: data.sessionId, siteKey });
-      } else if (data.error) {
-        alert('Ошибка API: ' + data.error);
-      }
-    } catch (e: any) {
-      alert('Сетевая ошибка или сбой: ' + e.message);
-    }
-  };
-
-  const handleCloseSession = async () => {
-    if (activeSession) {
-      try {
-        // Stop the session in background
-        fetch('/api/auth/release', {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ sessionId: activeSession.sessionId })
-        }).catch(err => console.error("Release error:", err));
-      } catch (e) {
-        console.error('Failed to release session', e);
-      }
-    }
-    setActiveSession(null);
-  };
-
-  const handleSaveSession = async () => {
-    if (!activeSession) return;
-    try {
-      setIsSaving(true);
-      let user = auth.currentUser;
-      const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
-      const fallbackUserId = tgUser ? String(tgUser.id) : 'anonymous_user';
-
-      const response = await fetch('/api/auth/save-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: user ? user.uid : fallbackUserId, 
-          siteKey: activeSession.siteKey,
-          sessionId: activeSession.sessionId
-        })
-      });
-      
-      if (!response.ok) {
-        let errorMsg = `HTTP Error: ${response.status} ${response.statusText}`;
-        try {
-          const errData = await response.json();
-          if (errData && errData.error) errorMsg = errData.error;
-        } catch (e) {}
-        throw new Error(errorMsg);
-      }
-      
-      setActiveSession(null); // Закрываем модалку после успеха
-    } catch (e: any) {
-      alert('Ошибка при сохранении сессии: ' + e.message);
-    } finally {
-      setIsSaving(false);
-    }
+  const handleStartAuth = async (siteKey: string) => {
+    setActiveSiteAuth(siteKey);
   };
 
   const handleRemoveSession = async (siteKey: string) => {
@@ -601,35 +508,16 @@ function PlatformsTab() {
     }
   };
 
+  if (activeSiteAuth === 'korter') {
+    return <KorterAuth onBack={() => setActiveSiteAuth(null)} userId={currentUserId} />;
+  }
+
+  if (activeSiteAuth && activeSiteAuth !== 'korter') {
+    return <PlatformLoginAuth onBack={() => setActiveSiteAuth(null)} siteKey={activeSiteAuth} userId={currentUserId} />;
+  }
+
   return (
     <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
-      {activeSession && (
-        <div className="absolute inset-0 z-[100] bg-[#f7f9fc] dark:bg-[#050505] flex flex-col">
-          <div className="p-4 flex items-center justify-between border-b border-[#e5edf5] dark:border-white/10 bg-white dark:bg-[#0F0F0F]">
-            <div className="flex flex-col">
-              <h3 className="font-bold text-[16px]">Авторизация</h3>
-              <span className="text-xs text-gray-400 text-left max-w-[200px]">Войдите в аккаунт и нажмите "Я вошел ✅"</span>
-            </div>
-            <div className="flex gap-2">
-              <button 
-                onClick={handleSaveSession} 
-                disabled={isSaving}
-                className="px-3 py-1.5 bg-[#15be53] hover:bg-[#12a849] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-              >
-                {isSaving ? "Сохраняем..." : "Я вошел ✅"}
-              </button>
-              <button 
-                onClick={handleCloseSession} 
-                disabled={isSaving}
-                className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-sm font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
-               >
-                Х
-               </button>
-            </div>
-          </div>
-          <iframe src={activeSession.url} className="flex-1 w-full border-none bg-white" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
-        </div>
-      )}
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/15 blur-[80px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/10 blur-[100px] rounded-full pointer-events-none" />
 
@@ -639,10 +527,10 @@ function PlatformsTab() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-8">
-        <PlatformAuthCard siteKey="korter" onAuth={handleCaptureAuth} onRemoveSession={handleRemoveSession} name="Korter" isConnected={!!sessions['korter']} total={sessions['korter'] ? 245 : 0} activeViews={sessions['korter'] ? 1240 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
-        <PlatformAuthCard siteKey="ssge" onAuth={handleCaptureAuth} onRemoveSession={handleRemoveSession} name="SS.ge" isConnected={!!sessions['ssge']} total={sessions['ssge'] ? 42 : 0} activeViews={sessions['ssge'] ? 380 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
-        <PlatformAuthCard siteKey="realting" onAuth={handleCaptureAuth} onRemoveSession={handleRemoveSession} name="Realting" isConnected={!!sessions['realting']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
-        <PlatformAuthCard siteKey="myhome" onAuth={handleCaptureAuth} onRemoveSession={handleRemoveSession} name="MyHome" isConnected={!!sessions['myhome']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="korter" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="Korter" isConnected={!!sessions['korter']} total={sessions['korter'] ? 245 : 0} activeViews={sessions['korter'] ? 1240 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="ssge" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="SS.ge" isConnected={!!sessions['ssge']} total={sessions['ssge'] ? 42 : 0} activeViews={sessions['ssge'] ? 380 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="realting" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="Realting" isConnected={!!sessions['realting']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="myhome" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="MyHome" isConnected={!!sessions['myhome']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
       </div>
     </div>
   );

@@ -7,7 +7,6 @@ import { startBot } from './server/bot.js';
 import { parseListingWithDeepSeek } from './server/ai.js';
 import { AuthManager } from './server/authManager.js';
 import { getFirestore } from 'firebase-admin/firestore';
-import { createProxyMiddleware } from 'http-proxy-middleware';
 
 async function startServer() {
   const app = express();
@@ -15,18 +14,6 @@ async function startServer() {
 
   app.use(cors());
   app.use(express.json());
-
-  // Proxy Steel requests to fix mixed content (supports HTTP and WebSockets)
-  const steelProxy = createProxyMiddleware({
-    target: 'http://72.56.1.59:8080',
-    changeOrigin: true,
-    ws: true,
-    pathRewrite: {
-      '^/steel-proxy': ''
-    }
-  });
-
-  app.use('/steel-proxy', steelProxy);
 
   // Init Telegram Bot
   startBot();
@@ -103,38 +90,18 @@ echo "Steel Browser is running on port 8080"
     }
   });
 
-  // Capture Session API
-  app.post('/api/auth/capture', async (req, res) => {
-    console.log('[API] /api/auth/capture hit:', req.body);
-    const { userId, siteKey } = req.body;
-    if (!userId || !siteKey) {
-      console.log('[API] /api/auth/capture failed: Missing userId or siteKey');
-      return res.status(400).json({ error: 'userId and siteKey are required' });
+  app.post('/api/auth/generic/login', async (req, res) => {
+    const { userId, siteKey, login, password } = req.body;
+    if (!userId || !siteKey || !login || !password) {
+      return res.status(400).json({ error: 'Missing parameters' });
     }
 
     try {
-      console.log(`[API] AuthManager StartSession...`);
-      const { interactiveUrl, sessionId } = await AuthManager.startSession(userId, siteKey as any);
-      console.log(`[API] AuthManager success. URL: ${interactiveUrl}, SessionID: ${sessionId}`);
-      
-      res.json({ success: true, interactiveUrl, sessionId });
+      console.log(`[API] Generic login started for: ${siteKey}`);
+      await AuthManager.loginWithPassword(userId, siteKey, login, password);
+      res.json({ status: 'success' });
     } catch (error: any) {
-      console.error('[API] /api/auth/capture Error:', error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Save Session API manually
-  app.post('/api/auth/save-session', async (req, res) => {
-    const { userId, siteKey, sessionId } = req.body;
-    if (!userId || !siteKey || !sessionId) {
-      return res.status(400).json({ error: 'userId, siteKey, sessionId are required' });
-    }
-
-    try {
-      await AuthManager.saveSession(userId, siteKey, sessionId);
-      res.json({ success: true });
-    } catch (error: any) {
+      console.error('[API] /api/auth/generic/login Error:', error.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -150,26 +117,6 @@ echo "Steel Browser is running on port 8080"
       await getFirestore().doc(`sessions/${userId}/platforms/${siteKey}`).delete();
       res.json({ success: true, message: 'Session removed' });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Release Steel Session
-  app.post('/api/auth/release', async (req, res) => {
-    const { sessionId } = req.body;
-    if (!sessionId) {
-      return res.status(400).json({ error: 'sessionId is required' });
-    }
-
-    try {
-      console.log(`[API] Releasing session manually: ${sessionId}`);
-      await fetch(`https://api.steel.dev/v1/sessions/${sessionId}/release`, {
-         method: 'POST',
-         headers: { 'steel-api-key': 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6' }
-      });
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error('[API] /api/auth/release Error:', error.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -198,16 +145,8 @@ echo "Steel Browser is running on port 8080"
     });
   }
 
-  const httpServer = app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
-  });
-
-  httpServer.on('upgrade', (req, socket, head) => {
-    if (req.url && req.url.startsWith('/novnc')) {
-      if (typeof steelProxy.upgrade === 'function') {
-         steelProxy.upgrade(req as any, socket as any, head);
-      }
-    }
   });
 }
 
