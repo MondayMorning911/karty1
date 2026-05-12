@@ -3,22 +3,33 @@ import { chromium } from 'playwright-extra';
 import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { FingerprintGenerator } from 'fingerprint-generator';
 import { FingerprintInjector } from 'fingerprint-injector';
+import * as admin from 'firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { initializeApp, getApps } from 'firebase-admin/app';
 import type { Page, BrowserContext } from 'playwright-core';
+import fs from 'fs';
+import path from 'path';
 
 chromium.use(stealthPlugin());
 
-// Ensure Firebase is initialized
-if (!getApps().length) {
+// Ensure Firebase Admin is initialized
+if (!admin.apps.length) {
   try {
-    initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'karty-app' });
+    const serviceAccountPath = path.resolve(process.cwd(), 'service-account.json');
+    if (fs.existsSync(serviceAccountPath)) {
+      const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+    } else {
+      console.warn('⚠️ service-account.json not found! Falling back to application default credentials.');
+      admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'karty-app' });
+    }
   } catch (e: any) {
     console.error("Firebase admin initialization warning:", e.message);
   }
 }
-
 const db = getFirestore();
+
 
 export class AuthManager {
   static async loginWithPassword(userId: string, platform: 'ssge' | 'myhome' | 'realting', loginStr: string, passwordStr: string) {
@@ -68,8 +79,9 @@ export class AuthManager {
       
       // Блокируем лишние ресурсы для ускорения загрузки
       await page.route('**/*', (route) => {
+        const url = route.request().url();
         const type = route.request().resourceType();
-        if (['image', 'media'].includes(type)) { // Не блокируем CSS/шрифты, чтобы не "спалиться" ботом
+        if (['image', 'font', 'media'].includes(type) || url.includes('google-analytics') || url.includes('facebook')) {
           route.abort();
         } else {
           route.continue();
@@ -77,10 +89,10 @@ export class AuthManager {
       });
 
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
-      const typeWithDelay = async (locator: string, text: string) => {
-        for (const char of text) {
-          await page.type(locator, char, { delay: Math.floor(Math.random() * 100) + 50 });
-        }
+      const fillWithDelay = async (locator: string, text: string) => {
+        await page.click(locator);
+        await delay(Math.random() * 200 + 200);
+        await page.fill(locator, text);
       };
 
       console.log(`[AuthManager] Navigating to ${targetUrl}`);
@@ -90,31 +102,23 @@ export class AuthManager {
       if (platform === 'ssge') {
         // ss.ge: fill login, wait for password, fill password, click login
         await page.waitForSelector('input.input[name="userName"]', { timeout: 10000 });
-        await page.click('input.input[name="userName"]');
+        await fillWithDelay('input.input[name="userName"]', loginStr);
         await delay(Math.random() * 500 + 200);
-        await typeWithDelay('input.input[name="userName"]', loginStr);
-        await delay(Math.random() * 500 + 200);
-        await page.click('input[name="password"]');
-        await delay(Math.random() * 500 + 200);
-        await typeWithDelay('input[name="password"]', passwordStr);
+        await fillWithDelay('input[name="password"]', passwordStr);
         await delay(Math.random() * 1000 + 500);
         await page.hover('button.primary-btn');
         await delay(Math.random() * 300 + 100);
         await page.click('button.primary-btn');
         
         // Wait for successful redirect back to home.ss.ge
-        await page.waitForURL('**/home.ss.ge/**', { waitUntil: 'commit', timeout: 15000 }).catch(e => console.warn('ssge waitForURL:', e.message));
+        await page.waitForFunction(() => window.location.hostname.includes('ss.ge') && !window.location.href.includes('login'), { timeout: 15000 }).catch(e => console.warn('ssge waitForFunction:', e.message));
         await delay(2000);
       } else if (platform === 'myhome') {
         // auth.tnet.ge
         await page.waitForSelector('#_r_m_', { timeout: 10000 });
-        await page.click('#_r_m_');
+        await fillWithDelay('#_r_m_', loginStr);
         await delay(Math.random() * 500 + 200);
-        await typeWithDelay('#_r_m_', loginStr);
-        await delay(Math.random() * 500 + 200);
-        await page.click('#_r_n_');
-        await delay(Math.random() * 500 + 200);
-        await typeWithDelay('#_r_n_', passwordStr);
+        await fillWithDelay('#_r_n_', passwordStr);
         
         await delay(Math.random() * 1000 + 500);
         await page.hover('button.bg-blue-100.hover\\:bg-blue-110');
@@ -122,17 +126,16 @@ export class AuthManager {
         await page.click('button.bg-blue-100.hover\\:bg-blue-110');
 
         // wait for successful login redirect
-        await page.waitForURL('**/myhome.ge/**', { waitUntil: 'commit', timeout: 15000 }).catch(e => console.warn('myhome waitForURL:', e.message));
+        await Promise.race([
+            page.waitForURL(/myhome\.ge/, { timeout: 30000 }),
+            page.waitForSelector('a[href*="logout"], .user-profile', { timeout: 30000 })
+        ]).catch(e => console.warn('myhome login wait warning:', e.message));
         await delay(2000);
       } else if (platform === 'realting') {
         await page.waitForSelector('#loginform-username', { timeout: 10000 });
-        await page.click('#loginform-username');
+        await fillWithDelay('#loginform-username', loginStr);
         await delay(Math.random() * 500 + 200);
-        await typeWithDelay('#loginform-username', loginStr);
-        await delay(Math.random() * 500 + 200);
-        await page.click('#loginform-password');
-        await delay(Math.random() * 500 + 200);
-        await typeWithDelay('#loginform-password', passwordStr);
+        await fillWithDelay('#loginform-password', passwordStr);
         
         // click submit (find submit button)
         await delay(Math.random() * 1000 + 500);

@@ -5,10 +5,30 @@ import { FingerprintGenerator } from 'fingerprint-generator';
 import { FingerprintInjector } from 'fingerprint-injector';
 import fs from 'fs';
 import path from 'path';
+import * as admin from 'firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 
 chromium.use(stealthPlugin());
+
+// Ensure Firebase Admin is initialized
+if (!admin.apps.length) {
+  try {
+    const serviceAccountPath = path.resolve(process.cwd(), 'service-account.json');
+    if (fs.existsSync(serviceAccountPath)) {
+      const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+    } else {
+      console.warn('⚠️ service-account.json not found! Falling back to application default credentials.');
+      admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'karty-app' });
+    }
+  } catch (e: any) {
+    console.error("Firebase admin initialization warning:", e.message);
+  }
+}
+const db = getFirestore();
 
 interface AuthSession {
   browser: Browser;
@@ -64,8 +84,9 @@ export const korterAuthManager = {
 
       // Блокируем лишние ресурсы для ускорения загрузки
       await page.route('**/*', (route) => {
+        const url = route.request().url();
         const type = route.request().resourceType();
-        if (['image', 'media'].includes(type)) { // Не блокируем CSS/шрифты, чтобы не "спалиться" ботом
+        if (['image', 'font', 'media'].includes(type) || url.includes('google-analytics') || url.includes('facebook')) {
           route.abort();
         } else {
           route.continue();
@@ -73,29 +94,33 @@ export const korterAuthManager = {
       });
 
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
-      const typeWithDelay = async (locator: string, text: string) => {
-        for (const char of text) {
-          await page.type(locator, char, { delay: Math.floor(Math.random() * 100) + 50 });
-        }
+      const fillWithDelay = async (locator: string, text: string) => {
+        await page.click(locator);
+        await delay(Math.random() * 200 + 200);
+        await page.fill(locator, text);
       };
 
       console.log(`[KorterAuth] Navigating to https://korter.ge/ru`);
       await page.goto('https://korter.ge/ru', { waitUntil: 'commit', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
       
+      // ЗАКРЫВАЕМ ОКНО ПРАВИЛ ЕСЛИ ЕСТЬ
+      await page.evaluate(() => {
+        const btn = document.querySelector('button.sho6zfj');
+        if (btn instanceof HTMLElement) btn.click();
+      }).catch(() => {});
+
       console.log(`[KorterAuth] Waiting for login button...`);
-      // Wait for login button and click
+      // Wait for login button and click (force true to bypass cookie banner)
       await page.waitForSelector('div.s1ipb8ld', { timeout: 10000 });
       await delay(Math.random() * 500 + 200);
       await page.hover('div.s1ipb8ld');
       await delay(Math.random() * 300 + 100);
-      await page.click('div.s1ipb8ld');
+      await page.click('div.s1ipb8ld', { force: true });
       
       console.log(`[KorterAuth] Waiting for login field...`);
       // Fill login field
       await page.waitForSelector('input.sxb0tu9', { timeout: 10000 });
-      await delay(Math.random() * 500 + 200);
-      await page.click('input.sxb0tu9');
-      await typeWithDelay('input.sxb0tu9', phoneOrEmail);
+      await fillWithDelay('input.sxb0tu9', phoneOrEmail);
       
       console.log(`[KorterAuth] Waiting for confirm button...`);
       // Click confirm
@@ -124,18 +149,16 @@ export const korterAuthManager = {
 
     try {
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
-      const typeWithDelay = async (locator: string, text: string) => {
-        for (const char of text) {
-          await page.type(locator, char, { delay: Math.floor(Math.random() * 100) + 50 });
-        }
+      const fillWithDelay = async (locator: string, text: string) => {
+        await page.click(locator);
+        await delay(Math.random() * 200 + 200);
+        await page.fill(locator, text);
       };
 
       console.log(`[KorterAuth] Verification started. Waiting for SMS code input field...`);
       // Вводим код в то самое поле
       await page.waitForSelector('input.s1mdnixp:nth-child(1)', { timeout: 10000 });
-      await delay(Math.random() * 500 + 200);
-      await page.click('input.s1mdnixp:nth-child(1)');
-      await typeWithDelay('input.s1mdnixp:nth-child(1)', smsCode);
+      await fillWithDelay('input.s1mdnixp:nth-child(1)', smsCode);
       
       console.log(`[KorterAuth] SMS code inputted. Waiting for success profile element...`);
       // Ждем появления имени профиля (признак успеха) - we need a generic selector or just wait a bit, 
@@ -166,7 +189,6 @@ export const korterAuthManager = {
           localStorage: Object.entries(localStorageData).map(([name, value]) => ({name, value})) as any
       }] as any;
 
-      const db = getFirestore();
       await db.doc(`users/${userId}/sessions/korter`).set({
         state: storageState,
         localStorage: localStorageData || {},
