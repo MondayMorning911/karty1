@@ -194,10 +194,25 @@ export class AuthManager {
       await page.close().catch(() => {});
       await context.close().catch(() => {});
       await browser.close().catch(() => {});
+      
+      console.log(`[AuthManager] Releasing Steel session ${sessionId}...`);
+      await fetch(`https://api.steel.dev/v1/sessions/${sessionId}/release`, {
+        method: 'POST',
+        headers: {
+          'steel-api-key': STEEL_API_KEY
+        }
+      }).catch(e => console.error("Error releasing session:", e));
 
       return { success: true };
     } catch (error: any) {
       await browser.close().catch(() => {});
+      console.log(`[AuthManager] Releasing Steel session ${sessionId} on error...`);
+      await fetch(`https://api.steel.dev/v1/sessions/${sessionId}/release`, {
+        method: 'POST',
+        headers: {
+          'steel-api-key': STEEL_API_KEY
+        }
+      }).catch(e => console.error("Error releasing session:", e));
       console.error(`[AuthManager] Failed to login:`, error.message);
       throw error;
     }

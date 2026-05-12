@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Home } from 'lucide-react';
 
 export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => void, siteKey: string, userId: string }) => {
   const [step, setStep] = useState<'login' | 'done'>('login');
@@ -119,14 +120,10 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
               
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-10 opacity-0 animate-[fadeIn_0.5s_ease-out_forwards]">
-                  <div className="relative w-24 h-24 mb-6 mt-2">
-                    {/* Clouds */}
-                    <svg className="w-24 h-12 text-slate-200/50 dark:text-white/5 absolute bottom-0" fill="currentColor" viewBox="0 0 24 24"><path d="M19.333 14.667a4.667 4.667 0 00-4.666-4.667 4.667 4.667 0 00-4.667-4.667 4.667 4.667 0 00-4.667 4.667A4.667 4.667 0 00.667 14.667h18.666z"/></svg>
+                  <div className="relative w-24 h-24 mb-6 mt-2 flex items-center justify-center">
                     {/* Bouncing House */}
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-2 animate-[bounce_1.5s_infinite]">
-                      <svg className="w-10 h-10 drop-shadow-lg" viewBox="0 0 24 24" fill={theme.primaryStr}>
-                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
-                      </svg>
+                    <div className="absolute animate-bounce">
+                      <Home style={{ color: theme.primaryStr }} size={48} strokeWidth={1.5} />
                     </div>
                   </div>
                   <h3 className="text-base font-bold text-slate-800 dark:text-white text-center mb-2 animate-pulse">

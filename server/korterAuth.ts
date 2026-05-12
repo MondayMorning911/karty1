@@ -37,6 +37,7 @@ interface AuthSession {
   browser: Browser;
   context: BrowserContext;
   page: Page;
+  sessionId: string;
 }
 
 const activeAuthSessions: Record<string, AuthSession> = {};
@@ -131,7 +132,7 @@ export const korterAuthManager = {
       await page.waitForSelector('input.sxb0tu9', { state: 'visible', timeout: 15000 });
       await fillWithDelay('input.sxb0tu9', phoneOrEmail);
       
-      console.log(`[KorterAuth] Waiting for confirm button...`);
+      console.log(`[KorterAuth] Wait for confirm button...`);
       // Click confirm
       await page.waitForSelector('button.a1w2sthb.bjrwb8u', { timeout: 10000 });
       await delay(Math.random() * 500 + 200);
@@ -141,10 +142,18 @@ export const korterAuthManager = {
 
       console.log(`[KorterAuth] Instance saved, awaiting SMS code.`);
       // Save instance to use it in code verification step
-      activeAuthSessions[userId] = { browser, context, page };
+      activeAuthSessions[userId] = { browser, context, page, sessionId };
       return { status: 'awaiting_code' };
     } catch (error: any) {
       console.error('Korter Start Login Error:', error);
+      try {
+        console.log(`[KorterAuth] Releasing Steel session on error...`);
+        const STEEL_API_KEY = process.env.STEEL_API_KEY || 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6';
+        await fetch(`https://api.steel.dev/v1/sessions/${activeAuthSessions[userId]?.sessionId || ''}/release`, {
+          method: 'POST',
+          headers: { 'steel-api-key': STEEL_API_KEY }
+        }).catch(() => {});
+      } catch (e) {}
       return { status: 'error', message: error.message };
     }
   },
@@ -217,10 +226,28 @@ export const korterAuthManager = {
       await page.close().catch(() => {});
       await context.close().catch(() => {});
       await browser.close().catch(() => {});
+      
+      console.log(`[KorterAuth] Releasing Steel session ${session.sessionId}...`);
+      const STEEL_API_KEY = process.env.STEEL_API_KEY || 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6';
+      await fetch(`https://api.steel.dev/v1/sessions/${session.sessionId}/release`, {
+        method: 'POST',
+        headers: {
+          'steel-api-key': STEEL_API_KEY
+        }
+      }).catch(e => console.error("Error releasing session:", e));
+
       delete activeAuthSessions[userId];
       return { status: 'success' };
     } catch (error: any) {
       await browser.close().catch(() => {});
+      try {
+        console.log(`[KorterAuth] Releasing Steel session on error...`);
+        const STEEL_API_KEY = process.env.STEEL_API_KEY || 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6';
+        await fetch(`https://api.steel.dev/v1/sessions/${session.sessionId}/release`, {
+          method: 'POST',
+          headers: { 'steel-api-key': STEEL_API_KEY }
+        }).catch(() => {});
+      } catch (e) {}
       delete activeAuthSessions[userId];
       console.error('Korter Verify Code Error:', error);
       return { status: 'error', message: error.message || "Failed to verify code" };
