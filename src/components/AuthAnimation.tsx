@@ -3,10 +3,9 @@ import { motion } from 'motion/react';
 import { Home, KeyRound, Cloud } from 'lucide-react';
 
 export const KartyLogo = ({ className = "w-12 h-12", theme = "default" }: { className?: string, theme?: string }) => {
-  const isKorter = theme === "korter";
   // Use inline styles for dynamic colors to ensure they don't get purged by Tailwind
-  const stemColor = isKorter ? "#2B3C5A" : "#1A2942";
-  const armColor = isKorter ? "#F05A28" : "#4B3BFF";
+  const stemColor = "#1A2942";
+  const armColor = "#4B3BFF";
   
   return (
     <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
@@ -17,16 +16,16 @@ export const KartyLogo = ({ className = "w-12 h-12", theme = "default" }: { clas
       {/* Bottom Right / House */}
       <path d="M44 63 L51 55 H64 C66 55 68 57 68 59 V73 C68 75 66 77 64 77 H48 C45 77 44 75 44 73 Z" fill={armColor} />
       {/* Windows */}
-      <rect x="52" y="60" width="6" height="6" rx="1.5" fill="#FFFFFF" className={isKorter ? "dark:fill-[#0A162B]" : ""} />
-      <rect x="52" y="69" width="6" height="6" rx="1.5" fill="#FFFFFF" className={isKorter ? "dark:fill-[#0A162B]" : ""} />
+      <rect x="52" y="60" width="6" height="6" rx="1.5" fill="#FFFFFF" />
+      <rect x="52" y="69" width="6" height="6" rx="1.5" fill="#FFFFFF" />
     </svg>
   );
 };
 
 export const AuthAnimation = ({ theme = "default" }: { theme?: string }) => {
-  const isKorter = theme === "korter";
-  const primaryColor = isKorter ? "#F05A28" : "#4B3BFF";
-  const softColor = isKorter ? "rgba(240, 90, 40, 0.15)" : "rgba(75, 59, 255, 0.15)";
+  const primaryColor = "#4B3BFF";
+  const softColor = "rgba(75, 59, 255, 0.15)";
+
   
   const [dots, setDots] = useState('');
 
