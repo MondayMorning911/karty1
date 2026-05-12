@@ -117,7 +117,28 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
                 Авторизация {getSiteName()}
               </h2>
               
-              <div className="space-y-4 mb-6">
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-10 opacity-0 animate-[fadeIn_0.5s_ease-out_forwards]">
+                  <div className="relative w-24 h-24 mb-6 mt-2">
+                    {/* Clouds */}
+                    <svg className="w-24 h-12 text-slate-200/50 dark:text-white/5 absolute bottom-0" fill="currentColor" viewBox="0 0 24 24"><path d="M19.333 14.667a4.667 4.667 0 00-4.666-4.667 4.667 4.667 0 00-4.667-4.667 4.667 4.667 0 00-4.667 4.667A4.667 4.667 0 00.667 14.667h18.666z"/></svg>
+                    {/* Bouncing House */}
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-2 animate-[bounce_1.5s_infinite]">
+                      <svg className="w-10 h-10 drop-shadow-lg" viewBox="0 0 24 24" fill={theme.primaryStr}>
+                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800 dark:text-white text-center mb-2 animate-pulse">
+                    Связываемся с площадкой...
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center px-4 leading-relaxed">
+                    Авторизация занимает от 15 до 40 секунд.<br/>Мы почти у цели 🔑
+                  </p>
+                </div>
+              ) : (
+              <>
+                <div className="space-y-4 mb-6">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Логин (Email или номер)</label>
                   <input 
@@ -155,12 +176,10 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
                 disabled={loading}
                 className={`w-full py-3.5 rounded-xl font-medium transition-colors disabled:opacity-70 flex items-center justify-center ${theme.btnClass}`}
               >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  'Войти в аккаунт'
-                )}
+                Войти в аккаунт
               </button>
+              </>
+              )}
             </>
           ) : (
             <div className="text-center py-6">

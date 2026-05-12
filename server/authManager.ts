@@ -76,10 +76,11 @@ export class AuthManager {
       await page.route('**/*', (route) => {
         const url = route.request().url();
         const type = route.request().resourceType();
-        if (['image', 'font', 'media'].includes(type) || url.includes('google-analytics') || url.includes('facebook')) {
-          route.abort();
+        if (['image', 'font', 'media', 'other'].includes(type) || 
+            url.includes('google-analytics') || url.includes('facebook') || url.includes('hotjar.com') || url.includes('googletagmanager.com')) {
+          route.abort().catch(() => {});
         } else {
-          route.continue();
+          route.continue().catch(() => {});
         }
       });
 
@@ -111,9 +112,14 @@ export class AuthManager {
       } else if (platform === 'myhome') {
         // auth.tnet.ge
         await page.waitForSelector('#_r_m_', { timeout: 10000 });
-        await fillWithDelay('#_r_m_', loginStr);
+        await page.click('#_r_m_');
+        await delay(100);
+        await page.locator('#_r_m_').pressSequentially(loginStr, { delay: 150 });
         await delay(Math.random() * 500 + 200);
-        await fillWithDelay('#_r_n_', passwordStr);
+        
+        await page.click('#_r_n_');
+        await delay(100);
+        await page.fill('#_r_n_', passwordStr);
         
         await delay(Math.random() * 1000 + 500);
         await page.hover('button.bg-blue-100.hover\\:bg-blue-110');
@@ -185,11 +191,13 @@ export class AuthManager {
       }, { merge: true });
       
       console.log(`[AuthManager] Session saved successfully for ${platform}.`);
-      await browser.close();
+      await page.close().catch(() => {});
+      await context.close().catch(() => {});
+      await browser.close().catch(() => {});
 
       return { success: true };
     } catch (error: any) {
-      await browser.close();
+      await browser.close().catch(() => {});
       console.error(`[AuthManager] Failed to login:`, error.message);
       throw error;
     }

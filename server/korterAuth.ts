@@ -83,10 +83,11 @@ export const korterAuthManager = {
       await page.route('**/*', (route) => {
         const url = route.request().url();
         const type = route.request().resourceType();
-        if (['image', 'font', 'media'].includes(type) || url.includes('google-analytics') || url.includes('facebook')) {
-          route.abort();
+        if (['image', 'font', 'media', 'other'].includes(type) || 
+            url.includes('google-analytics') || url.includes('facebook') || url.includes('hotjar.com') || url.includes('googletagmanager.com')) {
+          route.abort().catch(() => {});
         } else {
-          route.continue();
+          route.continue().catch(() => {});
         }
       });
 
@@ -100,14 +101,21 @@ export const korterAuthManager = {
       console.log(`[KorterAuth] Navigating to https://korter.ge/ru`);
       await page.goto('https://korter.ge/ru', { waitUntil: 'commit', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
       
-      // ЗАКРЫВАЕМ ОКНО ПРАВИЛ ЕСЛИ ЕСТЬ
+      // ЗАКРЫВАЕМ ОКНО ПРАВИЛ ЕСЛИ ЕСТЬ, И ПАПНЕЛИ ПЕРЕВОДА
       await page.evaluate(() => {
-        const overlays = document.querySelectorAll('button, div[role="button"]');
+        const overlays = document.querySelectorAll('button, div[role="button"], a');
         overlays.forEach(el => {
-          if (el.textContent?.includes('Принять') || el.textContent?.includes('Accept')) {
+          const text = el.textContent?.toLowerCase() || '';
+          if (text.includes('принять') || text.includes('accept') || text.includes('got it') || text.includes('agree') || text.includes('понятно') || text.includes('закрыть')) {
             (el as HTMLElement).click();
           }
         });
+        
+        // Попробуем найти крестик гугл транслейта если он есть
+        const closeTranslate = document.querySelector('.skiptranslate.goog-close-link, #goog-gt-tt .goog-close-link, .VIpgJd-Zvi9od-aZ2wEe-wOHMyf');
+        if (closeTranslate) {
+          (closeTranslate as HTMLElement).click();
+        }
       }).catch(() => {});
 
       console.log(`[KorterAuth] Waiting for login button...`);
@@ -206,11 +214,13 @@ export const korterAuthManager = {
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      await browser.close();
+      await page.close().catch(() => {});
+      await context.close().catch(() => {});
+      await browser.close().catch(() => {});
       delete activeAuthSessions[userId];
       return { status: 'success' };
     } catch (error: any) {
-      await browser.close();
+      await browser.close().catch(() => {});
       delete activeAuthSessions[userId];
       console.error('Korter Verify Code Error:', error);
       return { status: 'error', message: error.message || "Failed to verify code" };
