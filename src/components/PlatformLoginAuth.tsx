@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Home } from 'lucide-react';
+import { AuthAnimation } from './AuthAnimation';
 
 export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => void, siteKey: string, userId: string }) => {
   const [step, setStep] = useState<'login' | 'done'>('login');
@@ -119,20 +120,7 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
               </h2>
               
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-10 opacity-0 animate-[fadeIn_0.5s_ease-out_forwards]">
-                  <div className="relative w-24 h-24 mb-6 mt-2 flex items-center justify-center">
-                    {/* Bouncing House */}
-                    <div className="absolute animate-bounce">
-                      <Home style={{ color: theme.primaryStr }} size={48} strokeWidth={1.5} />
-                    </div>
-                  </div>
-                  <h3 className="text-base font-bold text-slate-800 dark:text-white text-center mb-2 animate-pulse">
-                    Связываемся с площадкой...
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center px-4 leading-relaxed">
-                    Авторизация занимает от 15 до 40 секунд.<br/>Мы почти у цели 🔑
-                  </p>
-                </div>
+                <AuthAnimation theme="default" />
               ) : (
               <>
                 <div className="space-y-4 mb-6">

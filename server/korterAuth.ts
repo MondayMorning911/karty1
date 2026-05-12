@@ -100,45 +100,45 @@ export const korterAuthManager = {
       };
 
       console.log(`[KorterAuth] Navigating to https://korter.ge/ru`);
-      await page.goto('https://korter.ge/ru', { waitUntil: 'commit', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
+      await page.goto('https://korter.ge/ru', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
       
       // ЗАКРЫВАЕМ ОКНО ПРАВИЛ ЕСЛИ ЕСТЬ, И ПАПНЕЛИ ПЕРЕВОДА
-      await page.evaluate(() => {
-        const overlays = document.querySelectorAll('button, div[role="button"], a');
-        overlays.forEach(el => {
-          const text = el.textContent?.toLowerCase() || '';
-          if (text.includes('принять') || text.includes('accept') || text.includes('got it') || text.includes('agree') || text.includes('понятно') || text.includes('закрыть')) {
-            (el as HTMLElement).click();
-          }
-        });
-        
-        // Попробуем найти крестик гугл транслейта если он есть
-        const closeTranslate = document.querySelector('.skiptranslate.goog-close-link, #goog-gt-tt .goog-close-link, .VIpgJd-Zvi9od-aZ2wEe-wOHMyf');
-        if (closeTranslate) {
-          (closeTranslate as HTMLElement).click();
-        }
-      }).catch(() => {});
+      await delay(3000); // Give it a moment to render
+      
+      console.log(`[KorterAuth] Handling cookies banner if present...`);
+      const cookiesBtn = page.locator('div.s1ipb8ld', { hasText: 'Принимаю Cookies' }).first();
+      await cookiesBtn.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+      if (await cookiesBtn.isVisible().catch(() => false)) {
+        await cookiesBtn.click({ force: true }).catch(() => {});
+      }
 
       console.log(`[KorterAuth] Waiting for login button...`);
-      // Wait for login button and click (force true to bypass cookie banner)
-      await page.waitForSelector('div.s1ipb8ld', { state: 'visible', timeout: 10000 });
-      await delay(Math.random() * 500 + 200);
-      await page.hover('div.s1ipb8ld', { force: true });
-      await delay(Math.random() * 300 + 100);
-      await page.click('div.s1ipb8ld', { force: true });
+      // Wait for login button and click
+      const loginBtn = page.locator('div.s1ipb8ld', { hasText: 'Войти' }).first();
+      await loginBtn.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+      if (!await loginBtn.isVisible().catch(() => false)) {
+          // generic fallback
+          const fallback = page.locator('button:has-text("Войти"), a[href*="login"], button[aria-label*="login" i], div:has-text("Войти")').filter({ hasNot: page.locator('div:has-text("Войти") div') }).first();
+          await fallback.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+          await fallback.click({ force: true }).catch(() => {});
+      } else {
+          await loginBtn.click({ force: true }).catch(() => {});
+      }
       
       console.log(`[KorterAuth] Waiting for login field...`);
-      // Fill login field
-      await page.waitForSelector('input.sxb0tu9', { state: 'visible', timeout: 15000 });
-      await fillWithDelay('input.sxb0tu9', phoneOrEmail);
+      // Generic login field
+      const inputLocator = page.locator('input[name="email-phone"], input.sxb0tu9').first();
+      await inputLocator.waitFor({ state: 'visible', timeout: 15000 });
+      await inputLocator.click();
+      await delay(Math.random() * 200 + 100);
+      await inputLocator.type(phoneOrEmail, { delay: 100 });
       
       console.log(`[KorterAuth] Wait for confirm button...`);
-      // Click confirm
-      await page.waitForSelector('button.a1w2sthb.bjrwb8u', { timeout: 10000 });
+      // Click Войти button 
+      const confirmBtn = page.locator('button.a1w2sthb.bjrwb8u:has-text("Войти"), button[type="submit"]').first();
+      await confirmBtn.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
       await delay(Math.random() * 500 + 200);
-      await page.hover('button.a1w2sthb.bjrwb8u');
-      await delay(Math.random() * 300 + 100);
-      await page.click('button.a1w2sthb.bjrwb8u');
+      await confirmBtn.click({ force: true }).catch(() => {});
 
       console.log(`[KorterAuth] Instance saved, awaiting SMS code.`);
       // Save instance to use it in code verification step
@@ -174,14 +174,22 @@ export const korterAuthManager = {
       };
 
       console.log(`[KorterAuth] Verification started. Waiting for SMS code input field...`);
-      // Вводим код в то самое поле
-      await page.waitForSelector('input.s1mdnixp:nth-child(1)', { timeout: 10000 });
-      await fillWithDelay('input.s1mdnixp:nth-child(1)', smsCode);
+      const smsInput = page.locator('input[type="tel"], input.s1mdnixp').first();
+      await smsInput.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+      await smsInput.click();
+      await delay(200);
+      await smsInput.type(smsCode, { delay: 100 });
       
       console.log(`[KorterAuth] SMS code inputted. Waiting for success profile element...`);
-      // Ждем появления имени профиля (признак успеха) - we need a generic selector or just wait a bit, 
-      // User says: 'div.sv0ienj.c7pdjhv'
-      await page.waitForSelector('div.sv0ienj.c7pdjhv', { timeout: 15000 });
+      await delay(2000);
+      
+      // Ждем чтобы кнопка "Войти" исчезла, или появились другие кнопки профиля
+      const hasLoginBtn = await page.locator('button.a1w2sthb.bjrwb8u:has-text("Войти")').isVisible().catch(() => false);
+      if (hasLoginBtn) {
+          throw new Error("Неверный код авторизации или ошибка");
+      }
+      
+      await page.waitForLoadState('networkidle').catch(() => {});
 
       console.log(`[KorterAuth] Profile element found. Authentication successful! Extracting storage state...`);
       // Сохраняем "Крепкие куки"
