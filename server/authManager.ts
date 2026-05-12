@@ -49,7 +49,7 @@ export class AuthManager {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': STEEL_API_KEY
+        'steel-api-key': STEEL_API_KEY
       },
       body: JSON.stringify({
         proxyUrl: 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@res.proxy-seller.com:10000',
