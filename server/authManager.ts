@@ -1,15 +1,9 @@
-import { chromium } from 'playwright-extra';
-// @ts-ignore
-import stealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { FingerprintGenerator } from 'fingerprint-generator';
-import { FingerprintInjector } from 'fingerprint-injector';
+import { chromium } from 'playwright-core';
 import * as admin from 'firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { Page, BrowserContext } from 'playwright-core';
 import fs from 'fs';
 import path from 'path';
-
-chromium.use(stealthPlugin());
 
 // Ensure Firebase Admin is initialized
 if (!admin.apps.length) {
@@ -28,8 +22,16 @@ if (!admin.apps.length) {
     console.error("Firebase admin initialization warning:", e.message);
   }
 }
-const db = getFirestore();
+let firestoreDatabaseId: string | undefined = undefined;
+try {
+  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    firestoreDatabaseId = firebaseConfig.firestoreDatabaseId;
+  }
+} catch (e) {}
 
+const db = firestoreDatabaseId ? getFirestore(admin.app(), firestoreDatabaseId) : getFirestore();
 
 export class AuthManager {
   static async loginWithPassword(userId: string, platform: 'ssge' | 'myhome' | 'realting', loginStr: string, passwordStr: string) {
@@ -40,39 +42,32 @@ export class AuthManager {
     if (platform === 'ssge') targetUrl = 'https://account.ss.ge/ka/account/login?returnUrl=%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3Dssweb%26scope%3Dbanners%2520files%2520house_api%2520offline_access%2520openid%2520paid_services%2520profile%2520real_estate%2520statistics%2520user_registration%2520web_apigateway%26response_type%3Dcode%26redirect_uri%3Dhttps%253A%252F%252Fhome.ss.ge%252Fapi%252Fauth%252Fcallback%252Fidentity-server4%26authority%3Dhttps%253A%252F%252Faccount.ss.ge%26post_logout_redirect_uri%3Dhttps%253A%252F%252Fhome.ss.ge%26response_mode%3Dquery%26code_challenge%3DQlEwHPQ_sdS-Rka6pg4x-_HwCJm34R0o6Wsy928y7fs%26code_challenge_method%3DS256';
     if (platform === 'realting') targetUrl = 'https://realting.com/ru/login';
 
-    const fingerprintGenerator = new FingerprintGenerator();
-    const fingerprintInjector = new FingerprintInjector();
+    const STEEL_API_KEY = process.env.STEEL_API_KEY || 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6';
     
-    // Generate browser fingerprint
-    const fingerprint = fingerprintGenerator.getFingerprint({
-      devices: ['desktop'],
-      operatingSystems: ['windows', 'macos'],
-      browsers: ['chrome'],
+    console.log(`[AuthManager] Creating Steel.dev session for ${platform}...`);
+    const sessionResponse = await fetch('https://api.steel.dev/v1/sessions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': STEEL_API_KEY
+      },
+      body: JSON.stringify({
+        proxyUrl: 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@res.proxy-seller.com:10000',
+        isStealth: true
+      })
     });
+    
+    if (!sessionResponse.ok) {
+        throw new Error(`Steel session creation failed: ${await sessionResponse.text()}`);
+    }
+    const sessionData = await sessionResponse.json();
+    const sessionId = sessionData.id;
 
-    const browser = await chromium.launch({ 
-      headless: true,
-      proxy: {
-        server: 'http://res.proxy-seller.com:10000',
-        username: 'd0e326028eb23797',
-        password: 'vh6bDxAKJj7XUsSq'
-      }
-    });
+    const browser = await chromium.connectOverCDP(`wss://connect.steel.dev?apiKey=${STEEL_API_KEY}&sessionId=${sessionId}`);
+    
     try {
-      console.log(`[AuthManager] Creating new browser context for ${platform}...`);
-      const context = await browser.newContext({
-        userAgent: fingerprint.fingerprint.navigator.userAgent,
-        locale: fingerprint.fingerprint.navigator.language,
-        viewport: {
-          width: fingerprint.fingerprint.screen.width,
-          height: fingerprint.fingerprint.screen.height,
-        },
-        extraHTTPHeaders: {
-          'accept-language': fingerprint.fingerprint.navigator.language,
-        }
-      });
-      
-      await fingerprintInjector.attachFingerprintToPlaywright(context as any, fingerprint);
+      console.log(`[AuthManager] Connected to Steel.dev browser context for ${platform}...`);
+      const context = browser.contexts()[0];
       
       console.log(`[AuthManager] Opening new page for ${platform}...`);
       const page = await context.newPage();
@@ -166,6 +161,10 @@ export class AuthManager {
           return {};
       });
       
+      // Ensure parent documents exist
+      await db.collection('users').doc(userId).set({ lastActive: FieldValue.serverTimestamp() }, { merge: true });
+      await db.collection('sessions').doc(userId).set({ lastActive: FieldValue.serverTimestamp() }, { merge: true });
+
       // Save origin localstorage in playwright state format
       pwStorageState.origins = [{
           origin: new URL(page.url()).origin,
@@ -173,17 +172,17 @@ export class AuthManager {
       }] as any;
 
       // Ensure save to Firestore
-      await db.doc(`users/${userId}/sessions/${platform}`).set({
+      await db.collection('users').doc(userId).collection('sessions').doc(platform).set({
         state: pwStorageState,
         localStorage: localStorageData || {},
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
 
-      await db.doc(`sessions/${userId}/platforms/${platform}`).set({
+      await db.collection('sessions').doc(userId).collection('platforms').doc(platform).set({
         state: pwStorageState,
         localStorage: localStorageData || {},
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
       
       console.log(`[AuthManager] Session saved successfully for ${platform}.`);
       await browser.close();

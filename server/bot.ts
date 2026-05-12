@@ -15,17 +15,15 @@ export function startBot() {
     return;
   }
 
-  const proxyUrl = process.env.PROXY_URL;
+  const proxyUrl = process.env.TELEGRAM_PROXY_URL || process.env.PROXY_URL || 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@141.98.54.148:10000';
   let requestOpts: any = undefined;
   
   if (proxyUrl) {
-    let agent: any;
     if (proxyUrl.startsWith('socks')) {
-      agent = new SocksProxyAgent(proxyUrl);
+      requestOpts = { agent: new SocksProxyAgent(proxyUrl) };
     } else {
-      agent = new HttpsProxyAgent(proxyUrl);
+      requestOpts = { proxy: proxyUrl };
     }
-    requestOpts = { agent };
     console.log(`Using proxy for Telegram Bot: ${proxyUrl}`);
   }
 

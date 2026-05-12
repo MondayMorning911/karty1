@@ -27,7 +27,16 @@ if (!admin.apps.length) {
     console.error("Firebase admin initialization warning:", e.message);
   }
 }
-const db = getFirestore();
+let firestoreDatabaseId: string | undefined = undefined;
+try {
+  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    firestoreDatabaseId = firebaseConfig.firestoreDatabaseId;
+  }
+} catch (e) {}
+
+const db = firestoreDatabaseId ? getFirestore(admin.app(), firestoreDatabaseId) : getFirestore();
 
 async function startServer() {
   const app = express();

@@ -1,15 +1,9 @@
-import { chromium } from 'playwright-extra';
-// @ts-ignore
-import stealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { FingerprintGenerator } from 'fingerprint-generator';
-import { FingerprintInjector } from 'fingerprint-injector';
+import { chromium } from 'playwright-core';
 import fs from 'fs';
 import path from 'path';
 import * as admin from 'firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
-
-chromium.use(stealthPlugin());
 
 // Ensure Firebase Admin is initialized
 if (!admin.apps.length) {
@@ -28,7 +22,16 @@ if (!admin.apps.length) {
     console.error("Firebase admin initialization warning:", e.message);
   }
 }
-const db = getFirestore();
+let firestoreDatabaseId: string | undefined = undefined;
+try {
+  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    firestoreDatabaseId = firebaseConfig.firestoreDatabaseId;
+  }
+} catch (e) {}
+
+const db = firestoreDatabaseId ? getFirestore(admin.app(), firestoreDatabaseId) : getFirestore();
 
 interface AuthSession {
   browser: Browser;
@@ -47,37 +50,31 @@ export const korterAuthManager = {
   // ШАГ 1: Инициация входа
   async startLogin(userId: string, phoneOrEmail: string) {
     try {
-      const fingerprintGenerator = new FingerprintGenerator();
-      const fingerprintInjector = new FingerprintInjector();
+      const STEEL_API_KEY = process.env.STEEL_API_KEY || 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6';
       
-      const fingerprint = fingerprintGenerator.getFingerprint({
-        devices: ['desktop'],
-        operatingSystems: ['windows', 'macos'],
-        browsers: ['chrome'],
-      });
-
-      const browser = await chromium.launch({ 
-        headless: true,
-        proxy: {
-          server: 'http://res.proxy-seller.com:10000',
-          username: 'd0e326028eb23797',
-          password: 'vh6bDxAKJj7XUsSq'
-        }
-      });
-      console.log(`[KorterAuth] Creating new browser context...`);
-      const context = await browser.newContext({
-        userAgent: fingerprint.fingerprint.navigator.userAgent,
-        locale: fingerprint.fingerprint.navigator.language,
-        viewport: {
-          width: fingerprint.fingerprint.screen.width,
-          height: fingerprint.fingerprint.screen.height,
+      console.log(`[KorterAuth] Creating Steel.dev session...`);
+      const sessionResponse = await fetch('https://api.steel.dev/v1/sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': STEEL_API_KEY
         },
-        extraHTTPHeaders: {
-          'accept-language': fingerprint.fingerprint.navigator.language,
-        }
+        body: JSON.stringify({
+          proxyUrl: 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@res.proxy-seller.com:10000',
+          isStealth: true
+        })
       });
       
-      await fingerprintInjector.attachFingerprintToPlaywright(context as any, fingerprint);
+      if (!sessionResponse.ok) {
+          throw new Error(`Steel session creation failed: ${await sessionResponse.text()}`);
+      }
+      const sessionData = await sessionResponse.json();
+      const sessionId = sessionData.id;
+
+      const browser = await chromium.connectOverCDP(`wss://connect.steel.dev?apiKey=${STEEL_API_KEY}&sessionId=${sessionId}`);
+      
+      console.log(`[KorterAuth] Connected to Steel.dev browser context...`);
+      const context = browser.contexts()[0];
 
       console.log(`[KorterAuth] Opening new page...`);
       const page = await context.newPage();
@@ -105,21 +102,25 @@ export const korterAuthManager = {
       
       // ЗАКРЫВАЕМ ОКНО ПРАВИЛ ЕСЛИ ЕСТЬ
       await page.evaluate(() => {
-        const btn = document.querySelector('button.sho6zfj');
-        if (btn instanceof HTMLElement) btn.click();
+        const overlays = document.querySelectorAll('button, div[role="button"]');
+        overlays.forEach(el => {
+          if (el.textContent?.includes('Принять') || el.textContent?.includes('Accept')) {
+            (el as HTMLElement).click();
+          }
+        });
       }).catch(() => {});
 
       console.log(`[KorterAuth] Waiting for login button...`);
       // Wait for login button and click (force true to bypass cookie banner)
-      await page.waitForSelector('div.s1ipb8ld', { timeout: 10000 });
+      await page.waitForSelector('div.s1ipb8ld', { state: 'visible', timeout: 10000 });
       await delay(Math.random() * 500 + 200);
-      await page.hover('div.s1ipb8ld');
+      await page.hover('div.s1ipb8ld', { force: true });
       await delay(Math.random() * 300 + 100);
       await page.click('div.s1ipb8ld', { force: true });
       
       console.log(`[KorterAuth] Waiting for login field...`);
       // Fill login field
-      await page.waitForSelector('input.sxb0tu9', { timeout: 10000 });
+      await page.waitForSelector('input.sxb0tu9', { state: 'visible', timeout: 15000 });
       await fillWithDelay('input.sxb0tu9', phoneOrEmail);
       
       console.log(`[KorterAuth] Waiting for confirm button...`);
@@ -184,22 +185,26 @@ export const korterAuthManager = {
           return {};
       });
 
+      // Ensure parent documents exist
+      await db.collection('users').doc(userId).set({ lastActive: FieldValue.serverTimestamp() }, { merge: true });
+      await db.collection('sessions').doc(userId).set({ lastActive: FieldValue.serverTimestamp() }, { merge: true });
+
       storageState.origins = [{
           origin: new URL(page.url()).origin,
           localStorage: Object.entries(localStorageData).map(([name, value]) => ({name, value})) as any
       }] as any;
 
-      await db.doc(`users/${userId}/sessions/korter`).set({
+      await db.collection('users').doc(userId).collection('sessions').doc('korter').set({
         state: storageState,
         localStorage: localStorageData || {},
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
 
-      await db.doc(`sessions/${userId}/platforms/korter`).set({
+      await db.collection('sessions').doc(userId).collection('platforms').doc('korter').set({
         state: storageState,
         localStorage: localStorageData || {},
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
 
       await browser.close();
       delete activeAuthSessions[userId];
