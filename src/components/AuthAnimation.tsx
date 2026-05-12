@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
+import { Home, KeyRound, Cloud } from 'lucide-react';
 
 export const KartyLogo = ({ className = "w-12 h-12", theme = "default" }: { className?: string, theme?: string }) => {
   const isKorter = theme === "korter";
@@ -23,9 +25,8 @@ export const KartyLogo = ({ className = "w-12 h-12", theme = "default" }: { clas
 
 export const AuthAnimation = ({ theme = "default" }: { theme?: string }) => {
   const isKorter = theme === "korter";
-  const glowColor = isKorter ? "rgba(240, 90, 40, 0.2)" : "rgba(75, 59, 255, 0.2)";
-  const ringPrimary = isKorter ? "border-[#F05A28]" : "border-[#4B3BFF]";
-  const textColor = isKorter ? "text-[#F05A28]" : "text-[#4B3BFF]";
+  const primaryColor = isKorter ? "#F05A28" : "#4B3BFF";
+  const softColor = isKorter ? "rgba(240, 90, 40, 0.15)" : "rgba(75, 59, 255, 0.15)";
   
   const [dots, setDots] = useState('');
 
@@ -37,48 +38,101 @@ export const AuthAnimation = ({ theme = "default" }: { theme?: string }) => {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center py-10 opacity-0 animate-[fadeIn_0.5s_ease-out_forwards] w-full relative">
-      <div className="relative w-32 h-32 mb-8 flex items-center justify-center">
+    <div className="flex flex-col items-center justify-center py-10 w-full relative min-h-[300px] overflow-hidden">
+      
+      {/* Interactive/Animated Scene */}
+      <div className="relative w-full h-40 flex flex-col items-center justify-center mb-8">
         
-        {/* Orbit Rings representing networking/connections */}
-        <div className={`absolute inset-0 rounded-full border border-slate-200 dark:border-slate-700 opacity-50`}></div>
-        <div className={`absolute inset-0 rounded-full border-[2.5px] border-transparent border-t-[#F05A28] border-r-[#F05A28] ${isKorter ? 'border-t-[#F05A28] border-r-[#F05A28]' : 'border-t-[#4B3BFF] border-r-[#4B3BFF]'} opacity-70 animate-[spin_3s_linear_infinite]`}></div>
-        <div className={`absolute inset-3 rounded-full border-[1.5px] border-transparent border-b-[#F05A28] border-l-[#F05A28] ${isKorter ? 'border-b-[#F05A28] border-l-[#F05A28]' : 'border-b-[#4B3BFF] border-l-[#4B3BFF]'} opacity-40 animate-[spin_4s_linear_infinite_reverse]`}></div>
+        {/* Background Clouds */}
+        <motion.div 
+          animate={{ x: [-20, 20], y: [0, -5, 0] }}
+          transition={{ duration: 4, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+          className="absolute top-0 left-[10%] text-slate-300 dark:text-slate-700 opacity-60"
+        >
+          <Cloud size={40} />
+        </motion.div>
+        
+        <motion.div 
+          animate={{ x: [20, -20], y: [0, 5, 0] }}
+          transition={{ duration: 5, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+          className="absolute top-6 right-[10%] text-slate-300 dark:text-slate-700 opacity-50"
+        >
+          <Cloud size={32} />
+        </motion.div>
 
-        {/* Soft Pulse Background */}
-        <div 
-          className="absolute inset-5 rounded-full blur-2xl animate-pulse"
-          style={{ backgroundColor: glowColor, animationDuration: '2s' }}
-        ></div>
+        {/* Small floating keys and houses */}
+        <motion.div
+           animate={{ y: [0, -15, 0], rotate: [0, -10, 0] }}
+           transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+           className="absolute left-[20%] bottom-[10%]"
+        >
+           <Home size={24} color={primaryColor} className="opacity-40" />
+        </motion.div>
+        
+        <motion.div
+           animate={{ y: [0, -20, 0], rotate: [0, 15, 0] }}
+           transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+           className="absolute right-[20%] bottom-[20%]"
+        >
+           <KeyRound size={20} color={primaryColor} className="opacity-40" />
+        </motion.div>
 
-        {/* Central Logo Container */}
-        <div className="relative z-10 w-16 h-16 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center shadow-lg border border-slate-100 dark:border-slate-800 animate-float">
-           <KartyLogo className="w-10 h-10 drop-shadow-sm" theme={theme} />
-           
-           {/* Check/Radar dot */}
-           <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full bg-white border-2 ${ringPrimary}`}>
-             <div className={`w-full h-full rounded-full ${isKorter ? 'bg-[#F05A28]' : 'bg-[#4B3BFF]'} animate-[ping_2s_ease-in-out_infinite] opacity-60`}></div>
-           </div>
-        </div>
+        {/* Main Logo Container */}
+        <motion.div
+          animate={{ y: [-5, 5] }}
+          transition={{ duration: 2, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+          className="relative z-10 w-20 h-20 bg-white dark:bg-slate-800 rounded-3xl flex items-center justify-center shadow-lg border border-slate-100 dark:border-slate-700"
+        >
+          {/* Pulse effect behind logo */}
+          <motion.div 
+            animate={{ scale: [1, 1.4], opacity: [0.5, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+            className="absolute inset-0 rounded-3xl"
+            style={{ backgroundColor: softColor }}
+          />
+          <KartyLogo className="w-12 h-12 relative z-10" theme={theme} />
+        </motion.div>
+        
+        {/* Connection arc/line */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
+           <motion.path
+             d="M -50 100 Q 150 160 350 100"
+             fill="transparent"
+             stroke={softColor}
+             strokeWidth="2.5"
+             strokeDasharray="8,8"
+             animate={{ strokeDashoffset: [0, -64] }}
+             transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+           />
+        </svg>
 
-        {/* Outer Connection Nodes */}
-        <div className="absolute w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600 top-2 left-6"></div>
-        <div className="absolute w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-500 bottom-4 right-5"></div>
       </div>
 
-      <div className="space-y-3 text-center z-10 flex flex-col items-center">
-        <h3 className="text-base font-semibold text-slate-800 dark:text-white mb-1 flex items-center justify-center">
-          Установка защищенного соединения<span className={`inline-block w-4 text-left ${textColor}`}>{dots}</span>
+      {/* Texts */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-4 text-center z-10 flex flex-col items-center px-4"
+      >
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center justify-center m-0">
+          Установка соединения
+          <span className="inline-block w-6 text-left" style={{ color: primaryColor }}>{dots}</span>
         </h3>
         
-        <p className="text-[13px] text-slate-500 dark:text-slate-400 font-medium tracking-wide">
-          МЫ ПОЧТИ У ЦЕЛИ. ОЖИДАНИЕ 15–40 СЕКУНД
+        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed max-w-[280px]">
+          Авторизация занимает от 15 до 40 секунд.<br/>Мы почти у цели 🪄
         </p>
         
-        <div className="mt-5 w-40 h-[3px] bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden relative">
-          <div className={`absolute top-0 bottom-0 left-0 w-1/2 rounded-full ${isKorter ? 'bg-[#F05A28]' : 'bg-[#4B3BFF]'} animate-scan`}></div>
+        {/* Progress bar simulation */}
+        <div className="w-48 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shrink-0 mt-2 relative">
+          <motion.div 
+            className="absolute top-0 bottom-0 w-1/2 rounded-full"
+            style={{ backgroundColor: primaryColor }}
+            animate={{ left: ["-50%", "100%"] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          />
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
