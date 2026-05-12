@@ -39,8 +39,16 @@ export class AuthManager {
       browsers: ['chrome'],
     });
 
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({ 
+      headless: true,
+      proxy: {
+        server: 'http://res.proxy-seller.com:10000',
+        username: 'd0e326028eb23797',
+        password: 'vh6bDxAKJj7XUsSq'
+      }
+    });
     try {
+      console.log(`[AuthManager] Creating new browser context for ${platform}...`);
       const context = await browser.newContext({
         userAgent: fingerprint.fingerprint.navigator.userAgent,
         locale: fingerprint.fingerprint.navigator.language,
@@ -55,12 +63,13 @@ export class AuthManager {
       
       await fingerprintInjector.attachFingerprintToPlaywright(context as any, fingerprint);
       
+      console.log(`[AuthManager] Opening new page for ${platform}...`);
       const page = await context.newPage();
       
       // Блокируем лишние ресурсы для ускорения загрузки
       await page.route('**/*', (route) => {
         const type = route.request().resourceType();
-        if (['image', 'font', 'media', 'stylesheet'].includes(type)) {
+        if (['image', 'media'].includes(type)) { // Не блокируем CSS/шрифты, чтобы не "спалиться" ботом
           route.abort();
         } else {
           route.continue();

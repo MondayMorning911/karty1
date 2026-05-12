@@ -36,7 +36,15 @@ export const korterAuthManager = {
         browsers: ['chrome'],
       });
 
-      const browser = await chromium.launch({ headless: true });
+      const browser = await chromium.launch({ 
+        headless: true,
+        proxy: {
+          server: 'http://res.proxy-seller.com:10000',
+          username: 'd0e326028eb23797',
+          password: 'vh6bDxAKJj7XUsSq'
+        }
+      });
+      console.log(`[KorterAuth] Creating new browser context...`);
       const context = await browser.newContext({
         userAgent: fingerprint.fingerprint.navigator.userAgent,
         locale: fingerprint.fingerprint.navigator.language,
@@ -51,12 +59,13 @@ export const korterAuthManager = {
       
       await fingerprintInjector.attachFingerprintToPlaywright(context as any, fingerprint);
 
+      console.log(`[KorterAuth] Opening new page...`);
       const page = await context.newPage();
 
       // Блокируем лишние ресурсы для ускорения загрузки
       await page.route('**/*', (route) => {
         const type = route.request().resourceType();
-        if (['image', 'font', 'media', 'stylesheet'].includes(type)) {
+        if (['image', 'media'].includes(type)) { // Не блокируем CSS/шрифты, чтобы не "спалиться" ботом
           route.abort();
         } else {
           route.continue();
@@ -70,8 +79,10 @@ export const korterAuthManager = {
         }
       };
 
+      console.log(`[KorterAuth] Navigating to https://korter.ge/ru`);
       await page.goto('https://korter.ge/ru', { waitUntil: 'commit', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
       
+      console.log(`[KorterAuth] Waiting for login button...`);
       // Wait for login button and click
       await page.waitForSelector('div.s1ipb8ld', { timeout: 10000 });
       await delay(Math.random() * 500 + 200);
@@ -79,12 +90,14 @@ export const korterAuthManager = {
       await delay(Math.random() * 300 + 100);
       await page.click('div.s1ipb8ld');
       
+      console.log(`[KorterAuth] Waiting for login field...`);
       // Fill login field
       await page.waitForSelector('input.sxb0tu9', { timeout: 10000 });
       await delay(Math.random() * 500 + 200);
       await page.click('input.sxb0tu9');
       await typeWithDelay('input.sxb0tu9', phoneOrEmail);
       
+      console.log(`[KorterAuth] Waiting for confirm button...`);
       // Click confirm
       await page.waitForSelector('button.a1w2sthb.bjrwb8u', { timeout: 10000 });
       await delay(Math.random() * 500 + 200);
@@ -92,6 +105,7 @@ export const korterAuthManager = {
       await delay(Math.random() * 300 + 100);
       await page.click('button.a1w2sthb.bjrwb8u');
 
+      console.log(`[KorterAuth] Instance saved, awaiting SMS code.`);
       // Save instance to use it in code verification step
       activeAuthSessions[userId] = { browser, context, page };
       return { status: 'awaiting_code' };
@@ -116,16 +130,19 @@ export const korterAuthManager = {
         }
       };
 
+      console.log(`[KorterAuth] Verification started. Waiting for SMS code input field...`);
       // Вводим код в то самое поле
       await page.waitForSelector('input.s1mdnixp:nth-child(1)', { timeout: 10000 });
       await delay(Math.random() * 500 + 200);
       await page.click('input.s1mdnixp:nth-child(1)');
       await typeWithDelay('input.s1mdnixp:nth-child(1)', smsCode);
       
+      console.log(`[KorterAuth] SMS code inputted. Waiting for success profile element...`);
       // Ждем появления имени профиля (признак успеха) - we need a generic selector or just wait a bit, 
       // User says: 'div.sv0ienj.c7pdjhv'
       await page.waitForSelector('div.sv0ienj.c7pdjhv', { timeout: 15000 });
 
+      console.log(`[KorterAuth] Profile element found. Authentication successful! Extracting storage state...`);
       // Сохраняем "Крепкие куки"
       const storageState = await context.storageState();
       
