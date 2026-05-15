@@ -6,6 +6,7 @@ import { korterAuthManager } from './server/korterAuth.js';
 import { startBot } from './server/bot.js';
 import { parseListingWithDeepSeek } from './server/ai.js';
 import { AuthManager } from './server/authManager.js';
+import { publishKorterAsync } from './server/korterPublisher.js';
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
@@ -149,6 +150,18 @@ echo "Steel Browser is running on port 8080"
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  });
+
+  app.post('/api/publish/korter', async (req, res) => {
+    const { userId, objectId, text } = req.body;
+    if (!userId || !objectId || !text) {
+      return res.status(400).json({ error: 'userId, objectId and text are required' });
+    }
+
+    // Call background async
+    publishKorterAsync(userId, objectId, text);
+    
+    res.json({ status: 'started' });
   });
 
   // Parse Listing with deepseek

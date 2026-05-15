@@ -205,19 +205,26 @@ function CreateTab() {
         title: displayTitle === 'Объект' && parsedAddress ? parsedAddress : displayTitle,
         desc: desc,
         date: new Date().toISOString(),
-        status: 'published',
+        status: 'publishing',
         platforms: activePlatforms,
         image: ''
       };
 
-      await addDoc(collection(db, 'listings'), listingData);
+      const docRef = await addDoc(collection(db, 'listings'), listingData);
+      
+      // Start publishing on Korter
+      if (activePlatforms.includes('Korter')) {
+        await fetch('/api/publish/korter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: auth.currentUser.uid, objectId: docRef.id, text: desc })
+        }).catch(console.error); // Ignore errors here, background processor will update firestore status
+      }
       
       setDesc("");
       setParsedData(null);
       setAddressCoords(null);
-      // Reset is handled, could navigate to history:
-      // (Depends on parent state, let's just show alert or success for now since we don't have direct access to setActiveTab)
-      alert("Успешно опубликовано!");
+      alert("Публикация начата. Вы можете следить за статусом в Истории объектов.");
     } catch (e) {
       console.error(e);
       alert("Ошибка при публикации");
@@ -691,6 +698,7 @@ function HistoryTab() {
                 
                 <div className="flex items-center gap-1.5 mt-2">
                   {item.status === 'published' && <StatusBadge type="success" text="Опубликовано" />}
+                  {item.status === 'publishing' && <StatusBadge type="publishing" text="Публикуется..." />}
                   {item.status === 'draft' && <StatusBadge type="neutral" text="Черновик" />}
                   {item.status === 'error' && <StatusBadge type="error" text="Ошибка платформ" />}
                 </div>
@@ -712,15 +720,16 @@ function HistoryTab() {
   );
 }
 
-function StatusBadge({ type, text }: { type: 'success' | 'neutral' | 'error', text: string }) {
+function StatusBadge({ type, text }: { type: 'success' | 'neutral' | 'error' | 'publishing', text: string }) {
   const colors = {
     success: 'bg-[#15be53]/10 text-[#15be53] dark:bg-emerald-500/10 dark:text-emerald-400',
+    publishing: 'bg-[#533afd]/10 text-[#533afd] dark:bg-[#533afd]/20 dark:text-blue-400 animate-pulse',
     neutral: 'bg-gray-100 text-[#64748d] dark:bg-gray-500/10 dark:text-gray-400',
     error: 'bg-[#ff4264]/10 text-[#ff4264] dark:bg-red-500/10 dark:text-red-400',
   };
   
   return (
-    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${colors[type]}`}>
+    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full flex items-center justify-center ${colors[type]}`}>
       {text}
     </span>
   );
