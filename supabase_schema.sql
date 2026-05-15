@@ -32,5 +32,6 @@ CREATE POLICY "Anon can do all platform_sessions matching user_id" ON platform_s
 CREATE POLICY "Anon can do all listings matching user_id" ON listings
   FOR ALL USING (true) WITH CHECK (true);
 
--- We allow anon access directly from the client by filtering user_id from the application. 
--- In a real app with Supabase Auth (email/password etc), we would check auth.uid().
+-- Enable Realtime for tables
+ALTER PUBLICATION supabase_realtime ADD TABLE platform_sessions;
+ALTER PUBLICATION supabase_realtime ADD TABLE listings;

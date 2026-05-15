@@ -17,7 +17,8 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // Init Telegram Bot
   startBot();
@@ -127,13 +128,13 @@ echo "Steel Browser is running on port 8080"
   });
 
   app.post('/api/publish/korter', async (req, res) => {
-    const { userId, objectId, text } = req.body;
+    const { userId, objectId, text, photos } = req.body;
     if (!userId || !objectId || !text) {
       return res.status(400).json({ error: 'userId, objectId and text are required' });
     }
 
     // Call background async
-    publishKorterAsync(userId, objectId, text);
+    publishKorterAsync(userId, objectId, text, photos);
     
     res.json({ status: 'started' });
   });

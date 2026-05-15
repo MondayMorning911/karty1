@@ -1,37 +1,10 @@
 import { chromium } from 'playwright-core';
-import * as admin from 'firebase-admin';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { supabaseServer } from './supabase.js';
 import type { Page, BrowserContext } from 'playwright-core';
 import fs from 'fs';
 import path from 'path';
 
-// Ensure Firebase Admin is initialized
-if (!admin.apps.length) {
-  try {
-    const serviceAccountPath = path.resolve(process.cwd(), 'service-account.json');
-    if (fs.existsSync(serviceAccountPath)) {
-      const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-    } else {
-      console.warn('⚠️ service-account.json not found! Falling back to application default credentials.');
-      admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'karty-app' });
-    }
-  } catch (e: any) {
-    console.error("Firebase admin initialization warning:", e.message);
-  }
-}
-let firestoreDatabaseId: string | undefined = undefined;
-try {
-  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    firestoreDatabaseId = firebaseConfig.firestoreDatabaseId;
-  }
-} catch (e) {}
 
-const db = firestoreDatabaseId ? getFirestore(admin.app(), firestoreDatabaseId) : getFirestore();
 
 export class AuthManager {
   static async loginWithPassword(userId: string, platform: 'ssge' | 'myhome' | 'realting', loginStr: string, passwordStr: string) {
@@ -167,28 +140,21 @@ export class AuthManager {
           return {};
       });
       
-      // Ensure parent documents exist
-      await db.collection('users').doc(userId).set({ lastActive: FieldValue.serverTimestamp() }, { merge: true });
-      await db.collection('sessions').doc(userId).set({ lastActive: FieldValue.serverTimestamp() }, { merge: true });
-
       // Save origin localstorage in playwright state format
       pwStorageState.origins = [{
           origin: new URL(page.url()).origin,
           localStorage: Object.entries(localStorageData).map(([name, value]) => ({name, value})) as any
       }] as any;
 
-      // Ensure save to Firestore
-      await db.collection('users').doc(userId).collection('sessions').doc(platform).set({
-        state: pwStorageState,
-        localStorage: localStorageData || {},
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-
-      await db.collection('sessions').doc(userId).collection('platforms').doc(platform).set({
-        state: pwStorageState,
-        localStorage: localStorageData || {},
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+      // Ensure save to Supabase
+      const { error: sessionError } = await supabaseServer.from('platform_sessions').upsert({
+        user_id: userId,
+        platform: platform,
+        state: pwStorageState
+      });
+      if (sessionError) {
+        console.error('Supabase save error:', sessionError);
+      }
       
       console.log(`[AuthManager] Session saved successfully for ${platform}.`);
       await page.close().catch(() => {});

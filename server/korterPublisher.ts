@@ -24,7 +24,7 @@ const openai = new OpenAI({
 
 
 
-export async function publishKorterAsync(userId: string, objectId: string, text: string) {
+export async function publishKorterAsync(userId: string, objectId: string, text: string, photos?: string[]) {
   try {
     // 1. Извлекаем данные через DeepSeek
     console.log(`[KorterPublisher] Parsing data for ${objectId} ...`);
@@ -212,7 +212,38 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           await page.fill('#price', String(parsed.price)).catch(()=>{});
       }
 
-      console.log(`[KorterPublisher] Filled form fields, attempting publish...`);
+      // Upload photos
+      if (photos && photos.length > 0) {
+          try {
+              console.log(`[KorterPublisher] Uploading ${photos.length} photos...`);
+              const fileBuffers = photos.map((dataUrl: string, idx: number) => {
+                  const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+                  if (!match) return null;
+                  const mimeType = match[1];
+                  const ext = mimeType.split('/')[1] || 'jpg';
+                  return {
+                      name: `photo_${idx}.${ext}`,
+                      mimeType,
+                      buffer: Buffer.from(match[2], 'base64')
+                  };
+              }).filter(Boolean);
+              
+              if (fileBuffers.length > 0) {
+                  const fileInput = page.locator('input[type="file"]').first();
+                  if (await fileInput.count() > 0) {
+                      await fileInput.setInputFiles(fileBuffers as any);
+                      // wait for uploads to process
+                      await delay(photos.length * 1500 + 2000); 
+                  } else {
+                      console.warn("[KorterPublisher] Could not find file input for photos");
+                  }
+              }
+          } catch (e: any) {
+              console.error("[KorterPublisher] Photo upload error:", e.message);
+          }
+      }
+
+      console.log(`[KorterPublisher] Filled form fields & photos, attempting publish...`);
 
       // Клик опубликовать
       const publishBtn = page.locator('div.s1ipb8ld', { hasText: 'Опубликовать объект' }).first();

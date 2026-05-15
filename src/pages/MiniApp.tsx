@@ -2,7 +2,7 @@ import React, { useState, MouseEvent, ChangeEvent, useEffect, useRef } from "rea
 import { AnimatePresence, motion } from "motion/react";
 import { TabType } from "../types";
 import { Link } from "react-router-dom";
-import { Camera, Star, X, Sparkles, FilePlus2, Layers, History, RefreshCcw, CheckCircle2, MoreVertical, Moon, Sun, ArrowRight, MapPin } from "lucide-react";
+import { Camera, Star, X, Sparkles, FilePlus2, Layers, History, RefreshCcw, CheckCircle2, MoreVertical, Moon, Sun, ArrowRight, MapPin, AlertCircle } from "lucide-react";
 import { KorterIcon, SSIcon, RealtingIcon, MyHomeIcon } from '../components/PlatformIcons';
 import { KorterAuth } from '../components/KorterAuth';
 import { PlatformLoginAuth } from '../components/PlatformLoginAuth';
@@ -246,6 +246,7 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
   const parsedPrice = parsedData?.price;
   const parsedRooms = parsedData?.rooms;
   const parsedFloor = parsedData?.floor;
+  const missingFields = parsedData?.missing_fields || [];
   
   const handleMapConfirmation = (confirm: boolean) => {
     setShowAddressConfirmation(false);
@@ -255,6 +256,37 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
   };
 
   const [isPublishing, setIsPublishing] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+
+  const handleAddPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    const files = Array.from(e.target.files);
+    
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setPhotos(prev => [...prev, event.target!.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    // Reset file input
+    e.target.value = '';
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const setMainPhoto = (index: number) => {
+    setPhotos(prev => {
+      const newPhotos = [...prev];
+      const selected = newPhotos.splice(index, 1)[0];
+      newPhotos.unshift(selected);
+      return newPhotos;
+    });
+  };
 
   const handlePublish = async () => {
     if (!desc.trim()) return;
@@ -295,7 +327,7 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
         await fetch('/api/publish/korter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: uid, objectId: docRef.id, text: desc })
+          body: JSON.stringify({ userId: uid, objectId: docRef.id, text: desc, photos })
         }).catch(console.error); // Ignore errors here, background processor will update firestore status
       }
       
@@ -392,6 +424,12 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
                     <span className="text-[#a0aabf]">🛏 Комнат:</span> <span className="font-semibold text-[#061b31] dark:text-white">{parsedRooms}</span>
                   </div>
                 )}
+                {missingFields.length > 0 && selectedPlatforms['korter'] && (
+                  <div className="w-full mt-1 bg-[#fff1f2] dark:bg-[#e71d36]/10 border border-[#e71d36]/20 py-1.5 px-2.5 rounded-md text-[11px] text-[#e71d36] font-medium flex items-start gap-1.5 leading-snug">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                    <span>Для Korter не хватает: {missingFields.join(', ')}. Укажите в тексте!</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -425,21 +463,37 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
         <div className="space-y-3">
           <h3 className="text-[12px] uppercase tracking-wider text-[#64748d] dark:text-gray-500 font-bold">Фотографии</h3>
           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-            <button className="shrink-0 w-28 h-28 rounded-[16px] bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/10 flex flex-col items-center justify-center gap-2 text-[#64748d] dark:text-gray-400 hover:text-[#533afd] dark:hover:text-white hover:bg-[#f6f9fc] dark:hover:bg-white/[0.05] hover:border-[#533afd]/40 dark:hover:border-white/20 transition-all active:scale-95 shadow-sm dark:shadow-none">
+            <label className="shrink-0 w-28 h-28 rounded-[16px] bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/10 flex flex-col items-center justify-center gap-2 text-[#64748d] dark:text-gray-400 hover:text-[#533afd] dark:hover:text-white hover:bg-[#f6f9fc] dark:hover:bg-white/[0.05] hover:border-[#533afd]/40 dark:hover:border-white/20 transition-all active:scale-95 shadow-sm dark:shadow-none cursor-pointer">
+              <input type="file" multiple accept="image/*" className="hidden" onChange={handleAddPhotos} />
               <Camera size={24} />
               <span className="text-[12px] font-medium">Добавить</span>
-            </button>
+            </label>
             
-            {/* Example photo */}
-            <div className={`relative shrink-0 w-28 h-28 rounded-[16px] border border-[#533afd] overflow-hidden ${STRIPE_SHADOW}`}>
-              <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80" alt="Room" className="w-full h-full object-cover" />
-              <div className="absolute top-2 left-2 bg-[#533afd] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1 backdrop-blur-md">
-                <Star size={8} className="fill-white" /> Обложка
+            {photos.map((photo, i) => (
+              <div 
+                key={i} 
+                className={`relative shrink-0 w-28 h-28 rounded-[16px] ${i === 0 ? 'border-2 border-[#533afd]' : 'border border-[#e5edf5] dark:border-transparent'} overflow-hidden ${STRIPE_SHADOW} cursor-pointer`}
+                onClick={() => i !== 0 && setMainPhoto(i)}
+              >
+                <img src={photo} alt={`Upload ${i}`} className="w-full h-full object-cover" />
+                {i === 0 && (
+                  <div className="absolute top-2 left-2 bg-[#533afd] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1 backdrop-blur-md">
+                    <Star size={8} className="fill-white" /> Обложка
+                  </div>
+                )}
+                {i !== 0 && (
+                  <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="text-white text-[10px] font-bold bg-black/50 px-2 py-1 rounded">Сделать главной</span>
+                  </div>
+                )}
+                <button 
+                  onClick={(e) => { e.stopPropagation(); removePhoto(i); }} 
+                  className="absolute top-2 right-2 p-1.5 bg-[#ffffff] dark:bg-black/50 rounded-full text-[#64748d] dark:text-white/70 hover:text-[#e71d36] dark:hover:text-red-400 shadow-sm transition-colors backdrop-blur-md z-10"
+                >
+                  <X size={12} />
+                </button>
               </div>
-              <button className="absolute top-2 right-2 p-1.5 bg-[#ffffff] dark:bg-black/50 rounded-full text-[#64748d] dark:text-white/70 hover:text-[#e71d36] dark:hover:text-red-400 shadow-sm transition-colors backdrop-blur-md">
-                <X size={12} />
-              </button>
-            </div>
+            ))}
           </div>
         </div>
 
