@@ -41,6 +41,26 @@ interface PageProps {
   toggleTheme: () => void;
 }
 
+export function useUserSessions(uid: string | null) {
+  const [sessions, setSessions] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+    if (!uid) return;
+    const unsub = onSnapshot(collection(db, `sessions/${uid}/platforms`), (snap) => {
+      const data: Record<string, any> = {};
+      snap.forEach(doc => {
+        data[doc.id] = doc.data();
+      });
+      setSessions(data);
+    }, (error) => {
+      console.error('Error fetching sessions:', error);
+    });
+    return () => unsub();
+  }, [uid]);
+
+  return sessions;
+}
+
 export function MiniApp({ theme, toggleTheme }: PageProps) {
   const [activeTab, setActiveTab] = useState<TabType>("create");
   const [uid, setUid] = useState<string | null>(null);
@@ -90,7 +110,7 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
               transition={{ duration: 0.2 }}
               className="h-full"
             >
-              {activeTab === "create" && <CreateTab />}
+              {activeTab === "create" && <CreateTab navigateToPlatforms={() => setActiveTab("platforms")} />}
               {activeTab === "platforms" && <PlatformsTab />}
               {activeTab === "history" && <HistoryTab />}
             </motion.div>
@@ -103,7 +123,7 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   );
 }
 
-function CreateTab() {
+function CreateTab({ navigateToPlatforms }: { navigateToPlatforms: () => void }) {
   const [desc, setDesc] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<StyleOption>('selling');
   
@@ -116,6 +136,31 @@ function CreateTab() {
   const [addressCoords, setAddressCoords] = useState<{lat: number, lng: number} | null>(null);
 
   const [activeEnhance, setActiveEnhance] = useState<string | null>(null);
+
+  const sessions = useUserSessions(auth.currentUser?.uid || null);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({});
+
+  // Auto-select platforms that are connected, if not already specifically deselected
+  useEffect(() => {
+    setSelectedPlatforms(prev => {
+      const next = { ...prev };
+      Object.keys(sessions).forEach(key => {
+        if (next[key] === undefined) {
+          next[key] = true;
+        }
+      });
+      return next;
+    });
+  }, [sessions]);
+
+  const togglePlatform = (key: string) => {
+    if (!sessions[key]) {
+      // If not connected, navigate to platforms
+      navigateToPlatforms();
+      return;
+    }
+    setSelectedPlatforms(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Debounced API call for AI parsing (extracts fields without rewriting text unless selectedStyle changes but let's decouple text rewriting)
   useEffect(() => {
@@ -192,11 +237,17 @@ function CreateTab() {
       alert("Авторизуйтесь для публикации");
       return;
     }
+
+    const activePlatformNames = ['korter', 'ssge', 'realting', 'myhome']
+      .filter(k => selectedPlatforms[k]);
+
+    if (activePlatformNames.length === 0) {
+      alert("Выберите хотя бы одну площадку для публикации");
+      return;
+    }
+
     setIsPublishing(true);
     try {
-      // Collect valid active platforms
-      const activePlatforms = ['Korter', 'SS.ge']; // Mocks for now
-
       // Real title calculation
       const displayTitle = [parsedRooms ? `${parsedRooms}-к. квартира` : 'Объект', parsedArea].filter(Boolean).join(', ');
 
@@ -206,14 +257,14 @@ function CreateTab() {
         desc: desc,
         date: new Date().toISOString(),
         status: 'publishing',
-        platforms: activePlatforms,
+        platforms: activePlatformNames,
         image: ''
       };
 
       const docRef = await addDoc(collection(db, 'listings'), listingData);
       
       // Start publishing on Korter
-      if (activePlatforms.includes('Korter')) {
+      if (activePlatformNames.includes('korter')) {
         await fetch('/api/publish/korter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -369,10 +420,10 @@ function CreateTab() {
         <div className="space-y-3 pb-24">
           <h3 className="text-[12px] uppercase tracking-wider text-[#64748d] dark:text-gray-500 font-bold">Площадки для публикации</h3>
           <div className="space-y-2">
-            <PlatformCheckbox name="Korter" active={true} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
-            <PlatformCheckbox name="SS.ge" active={true} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
-            <PlatformCheckbox name="Realting" active={false} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
-            <PlatformCheckbox name="MyHome" active={false} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
+            <PlatformCheckbox onClick={() => togglePlatform('korter')} name="Korter" active={!!selectedPlatforms['korter']} isConnected={!!sessions['korter']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
+            <PlatformCheckbox onClick={() => togglePlatform('ssge')} name="SS.ge" active={!!selectedPlatforms['ssge']} isConnected={!!sessions['ssge']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
+            <PlatformCheckbox onClick={() => togglePlatform('realting')} name="Realting" active={!!selectedPlatforms['realting']} isConnected={!!sessions['realting']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
+            <PlatformCheckbox onClick={() => togglePlatform('myhome')} name="MyHome" active={!!selectedPlatforms['myhome']} isConnected={!!sessions['myhome']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
           </div>
         </div>
       </div>
@@ -543,14 +594,19 @@ function PlatformsTab() {
   );
 }
 
-function PlatformCheckbox({ name, active, logoBg, logoColor, logo }: any) {
+function PlatformCheckbox({ name, active, isConnected, logoBg, logoColor, logo, onClick }: any) {
   return (
-    <div className="flex items-center justify-between p-3 rounded-[14px] bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/5 hover:border-[#c1d1e0] dark:hover:border-white/10 shadow-sm dark:shadow-none cursor-pointer transition-colors">
+    <div onClick={onClick} className={`flex items-center justify-between p-3 rounded-[14px] bg-[#ffffff] dark:bg-white/[0.02] border ${isConnected === false ? 'border-dashed border-[#e5edf5] dark:border-white/5 opacity-70' : 'border-[#e5edf5] dark:border-white/5'} hover:border-[#c1d1e0] dark:hover:border-white/10 shadow-sm dark:shadow-none cursor-pointer transition-colors`}>
       <div className="flex items-center gap-3">
         <div className={`relative w-8 h-8 rounded-full ${logoBg} flex items-center justify-center ${logoColor} font-bold text-sm border border-[#e5edf5] dark:border-white/5`}>
           {logo}
         </div>
-        <p className="text-[14px] font-semibold text-[#061b31] dark:text-white/90">{name}</p>
+        <div>
+          <p className="text-[14px] font-semibold text-[#061b31] dark:text-white/90 leading-tight">{name}</p>
+          {isConnected === false && (
+            <p className="text-[10px] text-[#ff4264] mt-0.5">Требуется вход</p>
+          )}
+        </div>
       </div>
       <div className={`w-12 h-[26px] rounded-full p-0.5 transition-colors duration-300 ${active ? 'bg-[#533afd]' : 'bg-[#e5edf5] dark:bg-white/10'}`}>
         <motion.div 
@@ -604,15 +660,24 @@ function PlatformAuthCard({ name, siteKey, isConnected, total, activeViews, logo
             <div className="flex flex-col">
                <span className="text-[11px] text-[#64748d] dark:text-gray-500 uppercase font-bold tracking-wider">Просмотров за 30 дн.</span>
                <span className="text-[16px] font-semibold text-[#061b31] dark:text-white mt-0.5">{activeViews}</span>
-            </div>
+             </div>
           </div>
-          <button 
-            onClick={handleRemove}
-            disabled={isLoading}
-            className="w-full bg-[#f6f9fc] text-[#ff4264] dark:bg-red-500/10 dark:text-red-400 px-4 py-2 rounded-lg text-sm font-semibold active:scale-95 transition-all text-center border border-red-500/10 disabled:opacity-50"
-          >
-            {isLoading ? "Удаление..." : "Удалить сессию"}
-          </button>
+          <div className="flex gap-2">
+            <button 
+              disabled={true}
+              className="flex-1 bg-[#15be53]/10 text-[#15be53] px-4 py-2.5 rounded-lg text-sm font-semibold text-center border border-[#15be53]/20 flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 size={16} /> Авторизован
+            </button>
+            <button 
+              onClick={handleRemove}
+              disabled={isLoading}
+              className="shrink-0 bg-[#f6f9fc] text-[#ff4264] dark:bg-red-500/10 dark:text-red-400 px-4 py-2.5 rounded-lg text-sm font-semibold active:scale-95 transition-all text-center border border-red-500/10 disabled:opacity-50"
+              title="Отключить"
+            >
+              {isLoading ? "..." : "Отключить"}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="mt-2 pt-3 border-t border-[#e5edf5] dark:border-white/5 flex gap-2">
