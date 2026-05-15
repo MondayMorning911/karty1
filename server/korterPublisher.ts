@@ -1,7 +1,6 @@
 import { chromium } from 'playwright-core';
 import type { Page, BrowserContext } from 'playwright-core';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
+import { supabaseServer } from './supabase.js';
 import OpenAI from 'openai';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
@@ -23,7 +22,7 @@ const openai = new OpenAI({
   httpAgent: httpAgent,
 });
 
-const db = getFirestore();
+
 
 export async function publishKorterAsync(userId: string, objectId: string, text: string) {
   try {
@@ -31,7 +30,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     console.log(`[KorterPublisher] Parsing data for ${objectId} ...`);
     
     // update status
-    await db.doc(`listings/${objectId}`).update({ status: 'publishing' }).catch(()=>{});
+    await supabaseServer.from('listings').update({ status: 'publishing' }).eq('id', objectId);
 
     const prompt = `
 Вам предоставлен текст объявления: "${text}".
@@ -69,11 +68,16 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     console.log(`[KorterPublisher] Parsed:`, parsed);
 
     // 2. Получаем сессию
-    const sessionDoc = await db.doc(`sessions/${userId}/platforms/korter`).get();
-    if (!sessionDoc.exists) {
+    const { data: sessionData, error: sessionError } = await supabaseServer
+      .from('platform_sessions')
+      .select('state')
+      .eq('user_id', userId)
+      .eq('platform', 'korter')
+      .single();
+
+    if (sessionError || !sessionData) {
       throw new Error('Нет активной сессии Korter');
     }
-    const sessionData = sessionDoc.data()!;
     const state = sessionData.state; // playwright storage state
     
     // 3. Запускаем Steel браузер
@@ -238,10 +242,10 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
 
       console.log(`[KorterPublisher] Finished successfully!`);
 
-      await db.doc(`listings/${objectId}`).update({ 
+      await supabaseServer.from('listings').update({ 
         status: 'published',
-        korterUrl: listingUrl || null
-      });
+        korter_url: listingUrl || null
+      }).eq('id', objectId);
 
       await browser.close().catch(()=>{});
       
@@ -253,17 +257,17 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     } catch (e: any) {
       console.error(`[KorterPublisher] Error:`, e);
       try { await browser.close(); } catch(err){}
-      await db.doc(`listings/${objectId}`).update({ 
+      await supabaseServer.from('listings').update({ 
         status: 'error',
-        errorDetails: e.message || 'Unknown Error'
-      }).catch(()=>{});
+        error_details: e.message || 'Unknown Error'
+      }).eq('id', objectId);
     }
 
   } catch (err: any) {
     console.error(`[KorterPublisher] Critical Error:`, err);
-    await db.doc(`listings/${objectId}`).update({ 
+    await supabaseServer.from('listings').update({ 
       status: 'error',
-      errorDetails: err.message || 'Unknown Error'
-    }).catch(()=>{});
+      error_details: err.message || 'Unknown Error'
+    }).eq('id', objectId);
   }
 }

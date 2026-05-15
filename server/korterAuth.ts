@@ -1,37 +1,8 @@
 import { chromium } from 'playwright-core';
 import fs from 'fs';
 import path from 'path';
-import * as admin from 'firebase-admin';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
-
-// Ensure Firebase Admin is initialized
-if (!admin.apps.length) {
-  try {
-    const serviceAccountPath = path.resolve(process.cwd(), 'service-account.json');
-    if (fs.existsSync(serviceAccountPath)) {
-      const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-    } else {
-      console.warn('⚠️ service-account.json not found! Falling back to application default credentials.');
-      admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'karty-app' });
-    }
-  } catch (e: any) {
-    console.error("Firebase admin initialization warning:", e.message);
-  }
-}
-let firestoreDatabaseId: string | undefined = undefined;
-try {
-  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    firestoreDatabaseId = firebaseConfig.firestoreDatabaseId;
-  }
-} catch (e) {}
-
-const db = firestoreDatabaseId ? getFirestore(admin.app(), firestoreDatabaseId) : getFirestore();
+import { supabaseServer } from './supabase.js';
 
 interface AuthSession {
   browser: Browser;
@@ -210,26 +181,20 @@ export const korterAuthManager = {
           return {};
       });
 
-      // Ensure parent documents exist
-      await db.collection('users').doc(userId).set({ lastActive: FieldValue.serverTimestamp() }, { merge: true });
-      await db.collection('sessions').doc(userId).set({ lastActive: FieldValue.serverTimestamp() }, { merge: true });
-
+      // Ensure parent documents exist -> This won't be needed with Supabase directly if we use foreign keys, but let's just insert
       storageState.origins = [{
           origin: new URL(page.url()).origin,
           localStorage: Object.entries(localStorageData).map(([name, value]) => ({name, value})) as any
       }] as any;
 
-      await db.collection('users').doc(userId).collection('sessions').doc('korter').set({
-        state: storageState,
-        localStorage: localStorageData || {},
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-
-      await db.collection('sessions').doc(userId).collection('platforms').doc('korter').set({
-        state: storageState,
-        localStorage: localStorageData || {},
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+      const { error: sessionError } = await supabaseServer.from('platform_sessions').upsert({
+        user_id: userId,
+        platform: 'korter',
+        state: storageState
+      });
+      if (sessionError) {
+        console.error('Supabase save error:', sessionError);
+      }
 
       await page.close().catch(() => {});
       await context.close().catch(() => {});

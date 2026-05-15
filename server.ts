@@ -7,37 +7,10 @@ import { startBot } from './server/bot.js';
 import { parseListingWithDeepSeek } from './server/ai.js';
 import { AuthManager } from './server/authManager.js';
 import { publishKorterAsync } from './server/korterPublisher.js';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
+import { supabaseServer } from './server/supabase.js';
 import fs from 'fs';
 
-// Ensure Firebase Admin is initialized
-if (!admin.apps.length) {
-  try {
-    const serviceAccountPath = path.resolve(process.cwd(), 'service-account.json');
-    if (fs.existsSync(serviceAccountPath)) {
-      const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-    } else {
-      console.warn('⚠️ service-account.json not found! Falling back to application default credentials.');
-      admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'karty-app' });
-    }
-  } catch (e: any) {
-    console.error("Firebase admin initialization warning:", e.message);
-  }
-}
-let firestoreDatabaseId: string | undefined = undefined;
-try {
-  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    firestoreDatabaseId = firebaseConfig.firestoreDatabaseId;
-  }
-} catch (e) {}
 
-const db = firestoreDatabaseId ? getFirestore(admin.app(), firestoreDatabaseId) : getFirestore();
 
 async function startServer() {
   const app = express();
@@ -145,7 +118,8 @@ echo "Steel Browser is running on port 8080"
     }
 
     try {
-      await db.doc(`sessions/${userId}/platforms/${siteKey}`).delete();
+      const { error } = await supabaseServer.from('platform_sessions').delete().match({ user_id: userId, platform: siteKey });
+      if (error) throw error;
       res.json({ success: true, message: 'Session removed' });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

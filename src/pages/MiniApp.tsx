@@ -8,9 +8,7 @@ import { KorterAuth } from '../components/KorterAuth';
 import { PlatformLoginAuth } from '../components/PlatformLoginAuth';
 import Map, { Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { auth, db } from '../firebase';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 // Same shadow constants as LandingPage
 const STRIPE_SHADOW = "shadow-[0_13px_27px_-5px_rgba(50,50,93,0.05),0_8px_16px_-8px_rgba(0,0,0,0.03)] dark:shadow-none";
@@ -46,16 +44,37 @@ export function useUserSessions(uid: string | null) {
   
   useEffect(() => {
     if (!uid) return;
-    const unsub = onSnapshot(collection(db, `sessions/${uid}/platforms`), (snap) => {
-      const data: Record<string, any> = {};
-      snap.forEach(doc => {
-        data[doc.id] = doc.data();
-      });
-      setSessions(data);
-    }, (error) => {
-      console.error('Error fetching sessions:', error);
-    });
-    return () => unsub();
+    
+    // Initial fetch
+    const fetchSessions = async () => {
+      const { data, error } = await supabase
+        .from('platform_sessions')
+        .select('platform, state, created_at')
+        .eq('user_id', uid);
+        
+      if (!error && data) {
+         const sessionDict: Record<string, any> = {};
+         data.forEach(row => {
+           sessionDict[row.platform] = { state: row.state, createdAt: row.created_at };
+         });
+         setSessions(sessionDict);
+      }
+    };
+    fetchSessions();
+
+    const channel = supabase.channel(`public:platform_sessions:user_id=eq.${uid}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'platform_sessions', filter: `user_id=eq.${uid}` },
+        () => {
+          fetchSessions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [uid]);
 
   return sessions;
@@ -66,14 +85,20 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   const [uid, setUid] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, user => {
-      if (user) {
-        setUid(user.uid);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUid(session.user.id);
       } else {
-        signInAnonymously(auth).catch(console.error);
+        supabase.auth.signInAnonymously().then(({ data }) => {
+          if (data?.user) setUid(data.user.id);
+        });
       }
     });
-    return () => unsub();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUid(session?.user?.id || null);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -110,9 +135,9 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
               transition={{ duration: 0.2 }}
               className="h-full"
             >
-              {activeTab === "create" && <CreateTab navigateToPlatforms={() => setActiveTab("platforms")} />}
-              {activeTab === "platforms" && <PlatformsTab />}
-              {activeTab === "history" && <HistoryTab />}
+              {activeTab === "create" && <CreateTab uid={uid} navigateToPlatforms={() => setActiveTab("platforms")} />}
+              {activeTab === "platforms" && <PlatformsTab uid={uid} />}
+              {activeTab === "history" && <HistoryTab uid={uid} />}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -123,7 +148,7 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   );
 }
 
-function CreateTab({ navigateToPlatforms }: { navigateToPlatforms: () => void }) {
+function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateToPlatforms: () => void }) {
   const [desc, setDesc] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<StyleOption>('selling');
   
@@ -137,7 +162,7 @@ function CreateTab({ navigateToPlatforms }: { navigateToPlatforms: () => void })
 
   const [activeEnhance, setActiveEnhance] = useState<string | null>(null);
 
-  const sessions = useUserSessions(auth.currentUser?.uid || null);
+  const sessions = useUserSessions(uid);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({});
 
   // Auto-select platforms that are connected, if not already specifically deselected
@@ -233,7 +258,7 @@ function CreateTab({ navigateToPlatforms }: { navigateToPlatforms: () => void })
 
   const handlePublish = async () => {
     if (!desc.trim()) return;
-    if (!auth.currentUser) {
+    if (!uid) {
       alert("Авторизуйтесь для публикации");
       return;
     }
@@ -252,7 +277,7 @@ function CreateTab({ navigateToPlatforms }: { navigateToPlatforms: () => void })
       const displayTitle = [parsedRooms ? `${parsedRooms}-к. квартира` : 'Объект', parsedArea].filter(Boolean).join(', ');
 
       const listingData = {
-        userId: auth.currentUser.uid,
+        userId: uid,
         title: displayTitle === 'Объект' && parsedAddress ? parsedAddress : displayTitle,
         desc: desc,
         date: new Date().toISOString(),
@@ -261,14 +286,16 @@ function CreateTab({ navigateToPlatforms }: { navigateToPlatforms: () => void })
         image: ''
       };
 
-      const docRef = await addDoc(collection(db, 'listings'), listingData);
+      const { data: docData, error } = await supabase.from('listings').insert([listingData]).select().single();
+      if (error) throw error;
+      const docRef = docData;
       
       // Start publishing on Korter
       if (activePlatformNames.includes('korter')) {
         await fetch('/api/publish/korter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: auth.currentUser.uid, objectId: docRef.id, text: desc })
+          body: JSON.stringify({ userId: uid, objectId: docRef.id, text: desc })
         }).catch(console.error); // Ignore errors here, background processor will update firestore status
       }
       
@@ -500,27 +527,11 @@ function CreateTab({ navigateToPlatforms }: { navigateToPlatforms: () => void })
   );
 }
 
-function PlatformsTab() {
-  const [sessions, setSessions] = useState<Record<string, any>>({});
-  const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
-  const fallbackUserId = tgUser ? String(tgUser.id) : 'anonymous_user';
-  const currentUserId = auth.currentUser ? auth.currentUser.uid : fallbackUserId;
+function PlatformsTab({ uid }: { uid: string | null }) {
+  const sessions = useUserSessions(uid);
+  const currentUserId = uid || 'anonymous_user';
 
   const [activeSiteAuth, setActiveSiteAuth] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-    const unsub = onSnapshot(collection(db, `sessions/${auth.currentUser.uid}/platforms`), (snap) => {
-      const data: Record<string, any> = {};
-      snap.forEach(doc => {
-        data[doc.id] = doc.data();
-      });
-      setSessions(data);
-    }, (error) => {
-      console.error(error);
-    });
-    return () => unsub();
-  }, []);
 
   const handleStartAuth = async (siteKey: string) => {
     setActiveSiteAuth(siteKey);
@@ -528,28 +539,15 @@ function PlatformsTab() {
 
   const handleRemoveSession = async (siteKey: string) => {
     try {
-      let user = auth.currentUser;
-      const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
-      const fallbackUserId = tgUser ? String(tgUser.id) : 'anonymous_user';
-
-      if (!user) {
-        try {
-          const cred = await signInAnonymously(auth);
-          user = cred.user;
-        } catch (e: any) {
-          if (e.code === 'auth/admin-restricted-operation') {
-            alert('Ошибка: необходимо включить "Anonymous provider" (Анонимный вход) в Firebase Console -> Authentication -> Sign-in method.');
-          } else {
-            alert('Ошибка авторизации (Firebase): ' + e.message);
-          }
-          return;
-        }
+      if (!uid) {
+        alert('Ошибка: Пользователь не авторизован');
+        return;
       }
       
       const response = await fetch('/api/auth/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user ? user.uid : fallbackUserId, siteKey })
+        body: JSON.stringify({ userId: uid, siteKey })
       });
       if (!response.ok) {
         let errorMsg = `HTTP Error: ${response.status} ${response.statusText}`;
@@ -694,28 +692,51 @@ function PlatformAuthCard({ name, siteKey, isConnected, total, activeViews, logo
   );
 }
 
-function HistoryTab() {
+function HistoryTab({ uid }: { uid: string | null }) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-    const q = query(collection(db, 'listings'), where('userId', '==', auth.currentUser.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      const items: HistoryItem[] = [];
-      snap.forEach(doc => {
-        items.push({ id: doc.id, ...doc.data() } as HistoryItem);
-      });
-      // Simple date sort descending
-      items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setHistory(items);
+    if (!uid) return;
+    
+    const fetchHistory = async () => {
+      const { data, error } = await supabase
+        .from('listings')
+        .select('*')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false });
+        
+      if (!error && data) {
+         setHistory(data.map(d => ({
+           id: d.id,
+           title: d.title,
+           desc: d.description || d.desc, // handle db rename
+           date: d.created_at || d.date,
+           platforms: d.platforms,
+           status: d.status,
+           image: d.image,
+           userId: d.user_id
+         })) as HistoryItem[]);
+      }
       setLoading(false);
-    }, (error) => {
-      console.error(error);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
+    };
+    
+    fetchHistory();
+    
+    const channel = supabase.channel(`public:listings:user_id=eq.${uid}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'listings', filter: `user_id=eq.${uid}` },
+        () => {
+          fetchHistory();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [uid]);
 
   return (
     <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
