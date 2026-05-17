@@ -60,7 +60,7 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
           primaryStr: '#2E5BFF',
           btnClass: 'bg-[#2E5BFF] hover:bg-[#254CE0] text-white shadow-[0_5px_15px_-3px_rgba(46,91,255,0.3)]',
           focusClass: 'focus:border-[#2E5BFF] focus:ring-1 focus:ring-[#2E5BFF]/30 dark:focus:border-[#2E5BFF]',
-          headerClass: 'bg-[#ffffff]/90 dark:bg-[#0A0A0A]/80 border-b-2 border-[#2E5BFF]',
+          headerClass: 'bg-white/90 dark:bg-[#0A0A0A]/80 border-b-2 border-[#2E5BFF]',
           headerTextClass: 'text-[#1A1A1A] dark:text-white font-extrabold tracking-tight',
           backBtnClass: 'bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white/80 hover:bg-slate-200 dark:hover:bg-white/20',
           inputClass: 'bg-[#FFFFFF] dark:bg-black/50 border-slate-300 rounded-none'
@@ -90,8 +90,8 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
           primaryStr: '#533afd',
           btnClass: 'bg-[#533afd] hover:bg-[#4430e5] text-white shadow-[0_5px_15px_-3px_rgba(83,58,253,0.3)]',
           focusClass: 'focus:border-[#533afd] dark:focus:border-[#533afd]',
-          headerClass: 'bg-[#ffffff]/90 dark:bg-[#0A0A0A]/80 border-b border-[#e5edf5] dark:border-white/5',
-          headerTextClass: 'text-[#061b31] dark:text-white font-bold',
+          headerClass: 'bg-white/90 dark:bg-[#0A0A0A]/80 border-b border-[#e5edf5] dark:border-white/5',
+          headerTextClass: 'text-slate-900 dark:text-white font-bold',
           backBtnClass: 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-white/80 hover:bg-slate-200 dark:hover:bg-white/20',
           inputClass: 'bg-slate-50 dark:bg-black/50 border-slate-200 rounded-xl'
         };
@@ -101,7 +101,7 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
   const theme = getTheme();
 
   return (
-    <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden text-[#061b31] dark:text-white">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden text-slate-900 dark:text-white">
       <div 
         className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] blur-[80px] rounded-full pointer-events-none" 
         style={{ backgroundColor: `${theme.primaryStr}15` }} 

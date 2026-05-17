@@ -239,17 +239,25 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           if (await strInput.isVisible().catch(()=>false)) {
               await strInput.fill('');
               await strInput.type(parsed.street, { delay: 100 });
-              await delay(1500);
-              const suggest = page.locator('div.s7gnlt').filter({ hasText: new RegExp(parsed.street, 'i') }).first();
-              if (await suggest.isVisible().catch(()=>false)) {
-                  await suggest.click({ force: true }).catch(()=>{});
-              } else {
-                  const fallbackSuggest = page.locator('div.s7gnlt').first();
-                  if (await fallbackSuggest.isVisible().catch(()=>false)) {
-                      await fallbackSuggest.click({ force: true }).catch(()=>{});
-                  } else {
-                      await page.keyboard.press('Enter').catch(()=>{});
+              await delay(2000);
+              
+              const suggest = page.locator('div.s7gnlt');
+              const count = await suggest.count();
+              if (count > 0) {
+                  let clicked = false;
+                  for(let i = 0; i < count; i++) {
+                      const text = await suggest.nth(i).innerText();
+                      if (text.toLowerCase().includes(parsed.street.toLowerCase())) {
+                          await suggest.nth(i).click({ force: true }).catch(()=>{});
+                          clicked = true;
+                          break;
+                      }
                   }
+                  if (!clicked) {
+                      await suggest.first().click({ force: true }).catch(()=>{});
+                  }
+              } else {
+                  await page.keyboard.press('Enter').catch(()=>{});
               }
               await delay(1000);
           }
@@ -259,11 +267,11 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           if (await numInput.isVisible().catch(()=>false)) {
               let currentNum = parseInt(String(parsed.houseNumber).replace(/[^\d]/g, '')) || 1;
               await numInput.fill(String(parsed.houseNumber));
-              await delay(1000);
+              await delay(1500);
               
-              const suggest = page.locator('div.s7gnlt').first();
-              if (await suggest.isVisible().catch(()=>false)) {
-                  await suggest.click({ force: true }).catch(()=>{});
+              const suggest = page.locator('div.s7gnlt');
+              if (await suggest.count() > 0) {
+                  await suggest.first().click({ force: true }).catch(()=>{});
               } else {
                   await page.keyboard.press('Enter').catch(()=>{});
               }
