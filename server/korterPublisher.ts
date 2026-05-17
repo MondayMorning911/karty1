@@ -113,6 +113,25 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       await page.goto('https://korter.ge/ru/property/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
       await delay(2000);
 
+      // Очистить форму перед заполнением
+      try {
+          const clearBtn = page.locator('div.s1ipb8ld', { hasText: 'Очистить форму' }).first();
+          if (await clearBtn.isVisible().catch(()=>false)) {
+              console.log(`[Korter] Form clear button found, clicking...`);
+              await clearBtn.click({ force: true }).catch(()=>{});
+              await delay(1000);
+          } else {
+              const clearTextBtn = page.locator('text="Очистить форму"').first();
+              if (await clearTextBtn.isVisible().catch(()=>false)) {
+                 console.log(`[Korter] Form clear text button found, clicking...`);
+                 await clearTextBtn.click({ force: true }).catch(()=>{});
+                 await delay(1000);
+              }
+          }
+      } catch (e) {
+         console.log(`[Korter] Failed to clear form: ${e}`);
+      }
+
       // 4. Заполняем форму
       // Тип сделки
       if (parsed.dealType) {
@@ -218,15 +237,21 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       if (parsed.street) {
           const strInput = page.locator('input[name="street"]').first();
           if (await strInput.isVisible().catch(()=>false)) {
-              await strInput.fill(parsed.street);
-              await delay(1000);
-              const suggest = page.locator('div.s7gnlt').first();
+              await strInput.fill('');
+              await strInput.type(parsed.street, { delay: 100 });
+              await delay(1500);
+              const suggest = page.locator('div.s7gnlt').filter({ hasText: new RegExp(parsed.street, 'i') }).first();
               if (await suggest.isVisible().catch(()=>false)) {
                   await suggest.click({ force: true }).catch(()=>{});
               } else {
-                  await page.keyboard.press('Enter').catch(()=>{});
+                  const fallbackSuggest = page.locator('div.s7gnlt').first();
+                  if (await fallbackSuggest.isVisible().catch(()=>false)) {
+                      await fallbackSuggest.click({ force: true }).catch(()=>{});
+                  } else {
+                      await page.keyboard.press('Enter').catch(()=>{});
+                  }
               }
-              await delay(500);
+              await delay(1000);
           }
       }
       if (parsed.houseNumber) {
@@ -245,7 +270,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               await delay(1000);
 
               // Check if map error appeared
-              const errorLocator = page.locator('text="Мы не нашли такой дом на карте"');
+              const errorLocator = page.locator('text="Мы не нашли такой дом"').first();
               if (await errorLocator.isVisible().catch(()=>false)) {
                   console.log(`[Korter] House number not found. Attempting nearby numbers starting from ${currentNum}`);
                   // Try nearby variants up to 10 numbers away
