@@ -18,10 +18,19 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
     
     setLoading(true);
     try {
+      let finalLogin = login.trim();
+      if (siteKey === 'myhome') {
+        if (!finalLogin.startsWith('995') && !finalLogin.startsWith('+995')) {
+           finalLogin = '995' + finalLogin;
+        } else if (finalLogin.startsWith('+995')) {
+           finalLogin = finalLogin.replace('+', '');
+        }
+      }
+
       const res = await fetch('/api/auth/generic/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, siteKey, login, password })
+        body: JSON.stringify({ userId, siteKey, login: finalLogin, password })
       });
       const data = await res.json();
       
@@ -125,15 +134,22 @@ export const PlatformLoginAuth = ({ onBack, siteKey, userId }: { onBack: () => v
               <>
                 <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Логин (Email или номер)</label>
-                  <input 
-                    type="text" 
-                    value={login}
-                    onChange={(e) => setLogin(e.target.value)}
-                    placeholder="example@mail.com"
-                    className={`w-full px-4 py-3 border dark:border-white/10 outline-none transition-colors ${theme.inputClass} ${theme.focusClass}`}
-                    disabled={loading}
-                  />
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                    {siteKey === 'myhome' ? 'Номер телефона' : siteKey === 'ssge' ? 'Логин (Email или номер)' : 'Логин (Email)'}
+                  </label>
+                  <div className="relative flex items-center">
+                    {siteKey === 'myhome' && (
+                       <span className="absolute left-4 text-slate-500 dark:text-slate-400 font-medium">+995</span>
+                    )}
+                    <input 
+                      type="text" 
+                      value={login}
+                      onChange={(e) => setLogin(e.target.value)}
+                      placeholder={siteKey === 'myhome' ? '500355455' : siteKey === 'ssge' ? '500355455 или email@mail.com' : 'example@mail.com'}
+                      className={`w-full ${siteKey === 'myhome' ? 'pl-14' : 'px-4'} py-3 border dark:border-white/10 outline-none transition-colors ${theme.inputClass} ${theme.focusClass}`}
+                      disabled={loading}
+                    />
+                  </div>
                 </div>
 
                 <div>

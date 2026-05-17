@@ -17,10 +17,18 @@ export const KorterAuth = ({ onBack, userId }: { onBack: () => void, userId: str
       
       setLoading(true);
       try {
+        let finalLogin = value.trim();
+        // If it looks like a phone number (just digits) and doesn't start with +, prepend +995
+        if (/^\d{9}$/.test(finalLogin)) {
+           finalLogin = '+995' + finalLogin;
+        } else if (/^995\d{9}$/.test(finalLogin)) {
+           finalLogin = '+' + finalLogin;
+        }
+
         const res = await fetch('/api/auth/korter/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, login: value })
+          body: JSON.stringify({ userId, login: finalLogin })
         });
         const data = await res.json();
         

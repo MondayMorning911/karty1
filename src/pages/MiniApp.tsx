@@ -84,6 +84,13 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   const [activeTab, setActiveTab] = useState<TabType>("create");
   const [uid, setUid] = useState<string | null>(null);
 
+  // Lifted state for CreateTab to persist between tab switches
+  const [desc, setDesc] = useState("");
+  const [selectedStyle, setSelectedStyle] = useState<StyleOption>('original');
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [parsedData, setParsedData] = useState<any>(null);
+  const [addressCoords, setAddressCoords] = useState<{lat: number, lng: number} | null>(null);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -135,7 +142,15 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
               transition={{ duration: 0.2 }}
               className="h-full"
             >
-              {activeTab === "create" && <CreateTab uid={uid} navigateToPlatforms={() => setActiveTab("platforms")} />}
+              {activeTab === "create" && <CreateTab 
+                  uid={uid} 
+                  navigateToPlatforms={() => setActiveTab("platforms")} 
+                  descState={[desc, setDesc]}
+                  styleState={[selectedStyle, setSelectedStyle]}
+                  photosState={[photos, setPhotos]}
+                  parsedDataState={[parsedData, setParsedData]}
+                  addressCoordsState={[addressCoords, setAddressCoords]}
+                />}
               {activeTab === "platforms" && <PlatformsTab uid={uid} />}
               {activeTab === "history" && <HistoryTab uid={uid} />}
             </motion.div>
@@ -148,17 +163,28 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   );
 }
 
-function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateToPlatforms: () => void }) {
-  const [desc, setDesc] = useState("");
-  const [selectedStyle, setSelectedStyle] = useState<StyleOption>('selling');
+function CreateTab({ 
+  uid, navigateToPlatforms, 
+  descState, styleState, photosState, parsedDataState, addressCoordsState
+}: { 
+  uid: string | null, 
+  navigateToPlatforms: () => void,
+  descState: [string, React.Dispatch<React.SetStateAction<string>>],
+  styleState: [StyleOption, React.Dispatch<React.SetStateAction<StyleOption>>],
+  photosState: [string[], React.Dispatch<React.SetStateAction<string[]>>],
+  parsedDataState: [any, React.Dispatch<React.SetStateAction<any>>],
+  addressCoordsState: [{lat: number, lng: number} | null, React.Dispatch<React.SetStateAction<{lat: number, lng: number} | null>>]
+}) {
+  const [desc, setDesc] = descState;
+  const [selectedStyle, setSelectedStyle] = styleState;
   
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [parsedData, setParsedData] = useState<any>(null);
+  const [parsedData, setParsedData] = parsedDataState;
   const [showAddressConfirmation, setShowAddressConfirmation] = useState(false);
   const [showFullscreenMap, setShowFullscreenMap] = useState(false);
   
   // Real coordinates from geocoding or drag
-  const [addressCoords, setAddressCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [addressCoords, setAddressCoords] = addressCoordsState;
 
   const [activeEnhance, setActiveEnhance] = useState<string | null>(null);
 
@@ -256,7 +282,7 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
   };
 
   const [isPublishing, setIsPublishing] = useState(false);
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [photos, setPhotos] = photosState;
 
   const handleAddPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
@@ -309,13 +335,11 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
       const displayTitle = [parsedRooms ? `${parsedRooms}-к. квартира` : 'Объект', parsedArea].filter(Boolean).join(', ');
 
       const listingData = {
-        userId: uid,
+        user_id: uid,
         title: displayTitle === 'Объект' && parsedAddress ? parsedAddress : displayTitle,
-        desc: desc,
-        date: new Date().toISOString(),
+        description: desc,
         status: 'publishing',
-        platforms: activePlatformNames,
-        image: ''
+        platforms: activePlatformNames
       };
 
       const { data: docData, error } = await supabase.from('listings').insert([listingData]).select().single();
