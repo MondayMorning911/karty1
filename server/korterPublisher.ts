@@ -91,7 +91,15 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       body: JSON.stringify({
         proxyUrl: 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@res.proxy-seller.com:10000',
         isStealth: true,
-        blockAds: false
+        blockAds: false,
+        launchOptions: {
+          args: [
+            '--use-gl=angle',
+            '--use-angle=swiftshader',
+            '--ignore-gpu-blocklist',
+            '--disable-blink-features=AutomationControlled'
+          ]
+        }
       })
     });
     
@@ -105,7 +113,13 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     
     try {
       console.log(`[KorterPublisher] Opened browser, applying state...`);
-      const context = await browser.newContext({ storageState: state, locale: 'ru-RU' });
+      const context = await browser.newContext({ 
+        storageState: state, 
+        locale: 'ru-RU',
+        permissions: ['geolocation'],
+        geolocation: { latitude: 41.6410, longitude: 41.6310 },
+        timezoneId: 'Asia/Tbilisi'
+      });
       const page = await context.newPage();
       
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
