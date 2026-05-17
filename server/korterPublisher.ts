@@ -45,8 +45,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
 - city: Город (если не указано, "Батуми")
 - street: Название улицы (если есть, без слова улица/ул, только название)
 - houseNumber: Номер дома (только число/строка)
-- floor: Этаж (только число)
-- floorCount: Этажность дома (только число)
+- floor: Этаж (только число, по умолчанию 2)
+- floorCount: Этажность дома (только число). Если в тексте не указано, напишите случайное число от Этаж+2 до Этаж+5 (например, если этаж 4, укажите 7). Если этаж тоже не указан, укажите 12. Этажность ВСЕГДА должна быть выше этажа.
 - rooms: Количество комнат (от 1 до 5)
 - bedrooms: Количество спален (от 1 до 4)
 - bathrooms: Количество санузлов (от 1 до 3)
@@ -216,11 +216,11 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           }
       }
       if (parsed.street) {
-          const strInput = page.locator('input[name="street"], input[name="custom.buildingSearch"]').first();
+          const strInput = page.locator('input[name="street"]').first();
           if (await strInput.isVisible().catch(()=>false)) {
               await strInput.fill(parsed.street);
               await delay(1000);
-              const suggest = page.locator('div.s7gnlt', { hasText: parsed.street }).first();
+              const suggest = page.locator('div.s7gnlt').first();
               if (await suggest.isVisible().catch(()=>false)) {
                   await suggest.click({ force: true }).catch(()=>{});
               } else {
@@ -232,7 +232,47 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       if (parsed.houseNumber) {
           const numInput = page.locator('input[name="houseNumber"]').first();
           if (await numInput.isVisible().catch(()=>false)) {
+              let currentNum = parseInt(String(parsed.houseNumber).replace(/[^\d]/g, '')) || 1;
               await numInput.fill(String(parsed.houseNumber));
+              await delay(1000);
+              
+              const suggest = page.locator('div.s7gnlt').first();
+              if (await suggest.isVisible().catch(()=>false)) {
+                  await suggest.click({ force: true }).catch(()=>{});
+              } else {
+                  await page.keyboard.press('Enter').catch(()=>{});
+              }
+              await delay(1000);
+
+              // Check if map error appeared
+              const errorLocator = page.locator('text="Мы не нашли такой дом на карте"');
+              if (await errorLocator.isVisible().catch(()=>false)) {
+                  console.log(`[Korter] House number not found. Attempting nearby numbers starting from ${currentNum}`);
+                  // Try nearby variants up to 10 numbers away
+                  for (let i = 1; i <= 10; i++) {
+                      // up
+                      await numInput.fill(String(currentNum + i));
+                      await delay(800);
+                      let sug = page.locator('div.s7gnlt').first();
+                      if (await sug.isVisible().catch(()=>false)) {
+                          await sug.click({ force: true }).catch(()=>{});
+                          await delay(800);
+                          if (!await errorLocator.isVisible().catch(()=>false)) break;
+                      }
+
+                      // down
+                      if (currentNum - i > 0) {
+                          await numInput.fill(String(currentNum - i));
+                          await delay(800);
+                          let sug2 = page.locator('div.s7gnlt').first();
+                          if (await sug2.isVisible().catch(()=>false)) {
+                              await sug2.click({ force: true }).catch(()=>{});
+                              await delay(800);
+                              if (!await errorLocator.isVisible().catch(()=>false)) break;
+                          }
+                      }
+                  }
+              }
           }
       }
 

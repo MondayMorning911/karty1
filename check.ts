@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 
-let firebaseConfig = {};
+let firebaseConfig: any = {};
 try {
   firebaseConfig = JSON.parse(fs.readFileSync('firebase-applet-config.json', 'utf8'));
 } catch (e) {}
