@@ -19,6 +19,62 @@ const openai = new OpenAI({
   httpAgent: httpAgent,
 });
 
+// Helper functions for geocoding
+async function fetchFromNominatim(query: string): Promise<string | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=1`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'KartyBot/1.0', 
+        'Accept-Language': 'ru'       
+      }
+    });
+
+    const data = await response.json();
+    if (data && data.length > 0) {
+      return data[0].display_name;
+    }
+    return null;
+  } catch (error: any) {
+    console.error(`⚠️ OSM Nominatim Error: ${error.message}`);
+    return null;
+  }
+}
+
+async function fetchFromPhoton(query: string): Promise<string | null> {
+  try {
+    const url = `https://photon.komoot.io/api?q=${encodeURIComponent(query)}&lang=ru&limit=1`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    const features = data?.features;
+    if (features && features.length > 0) {
+      const props = features[0].properties;
+      const parts = [
+        props.name,
+        props.street ? `${props.street}${props.housenumber ? ', ' + props.housenumber : ''}` : null,
+        props.city || props.town,
+        props.country
+      ].filter(Boolean);
+
+      return parts.join(', ');
+    }
+    return null;
+  } catch (error: any) {
+    console.error(`⚠️ Photon API Error: ${error.message}`);
+    return null;
+  }
+}
+
+async function getComplexAddress(complexName: string, city: string = 'Батуми'): Promise<string | null> {
+  const fullQuery = `Грузия, ${city}, ${complexName}`;
+  const osmAddress = await fetchFromNominatim(fullQuery);
+  if (osmAddress) return osmAddress;
+  console.log(`🔄 OSM не справился с "${complexName}", подключаю План Б (Photon)...`);
+  const photonAddress = await fetchFromPhoton(fullQuery);
+  return photonAddress || null;
+}
+
 // Since the user is editing, we debounce the input on frontend
 export async function parseListingWithDeepSeek(text: string, styleId: string) {
   let systemPrompt = '';
@@ -74,10 +130,17 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
 - dealType: Тип сделки ("Продажа", "Долгосрочная аренда", "Посуточная аренда")
 - propertyType: Тип недвижимости ("Квартира", "Дом", "Коммерческая недвижимость")
 - city: город (например, Батуми)
-- street: улица
+- residential_complex: Название ЖК (если есть в тексте, например "Orbi City", "Alliance Palace")
+- street: улица (если указана)
 - area: площадь числом
 - price: цена числом
 - rooms: количество комнат
+
+ПРАВИЛО ДЛЯ КОМНАТ: Если количество комнат не указано явно в тексте, но есть площадь объекта, ВЫСЧИТАЙТЕ количество комнат:
+- до 35 м² -> 1 комната (Студия)
+- от 36 до 55 м² -> 2 комнаты
+- от 56 до 80 м² -> 3 комнаты
+- свыше 80 м² -> 4 комнаты
 
 Извлеките все эти параметры и дополнительно:
 - floor: этаж
@@ -85,7 +148,7 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
 - address: Полная строка адреса для геокодинга. Оставьте пустым, если адреса нет.
 
 Если какие-то параметры отсутствуют, верните null для них.
-Также добавьте массив "missing_fields", перечислив на русском языке те обязательные параметры, которых нет в тексте (например, ["Тип сделки", "Площадь", "Улица"]). Верните пустой массив, если все есть.
+Также добавьте массив "missing_fields", перечислив на русском языке те обязательные параметры, которых нет в тексте и невозможно высчитать (например, если нет площади, то и комнат не высчитать). Верните пустой массив, если все есть.
 Верните ТОЛЬКО JSON объект.`;
   }
 
@@ -104,19 +167,38 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
 
     const json = JSON.parse(resultText);
 
-    // If an address was parsed, try to geocode it (only needed for extraction step)
-    if (json.address && styleId === 'original') {
-      const mapboxToken = process.env.VITE_MAPBOX_TOKEN;
-      try {
-        const geoResponse = await fetch(`https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(json.address)}&access_token=${mapboxToken}&limit=1`);
-        const geoData = await geoResponse.json();
-        if (geoData && geoData.features && geoData.features.length > 0) {
-          const coords = geoData.features[0].geometry.coordinates; // [lng, lat]
-          json.lng = coords[0];
-          json.lat = coords[1];
+    if (styleId === 'original') {
+      // If address is missing but we have a residential complex, try to fetch the address
+      if (!json.address && json.residential_complex) {
+        console.log(`[AI] Address is missing, trying to find address for complex: ${json.residential_complex}`);
+        const foundAddress = await getComplexAddress(json.residential_complex, json.city || 'Батуми');
+        if (foundAddress) {
+          json.address = foundAddress;
+          // Remove "Улица" or "Адрес" from missing_fields if we successfully found it
+          if (Array.isArray(json.missing_fields)) {
+            json.missing_fields = json.missing_fields.filter((f: string) => 
+               !f.toLowerCase().includes('улица') && !f.toLowerCase().includes('адрес')
+            );
+          }
         }
-      } catch (geoError) {
-        console.error("Mapbox geocoding error:", geoError);
+      }
+
+      // If an address was parsed or found, try to geocode it for coordinates
+      if (json.address) {
+        const mapboxToken = process.env.VITE_MAPBOX_TOKEN;
+        if (mapboxToken) {
+          try {
+            const geoResponse = await fetch(`https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(json.address)}&access_token=${mapboxToken}&limit=1`);
+            const geoData = await geoResponse.json();
+            if (geoData && geoData.features && geoData.features.length > 0) {
+              const coords = geoData.features[0].geometry.coordinates; // [lng, lat]
+              json.lng = coords[0];
+              json.lat = coords[1];
+            }
+          } catch (geoError) {
+            console.error("Mapbox geocoding error:", geoError);
+          }
+        }
       }
     }
 

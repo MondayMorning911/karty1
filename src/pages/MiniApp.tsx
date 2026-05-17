@@ -424,10 +424,10 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
                     <span className="text-[#a0aabf]">🛏 Комнат:</span> <span className="font-semibold text-[#061b31] dark:text-white">{parsedRooms}</span>
                   </div>
                 )}
-                {missingFields.length > 0 && selectedPlatforms['korter'] && (
+                {missingFields.length > 0 && (
                   <div className="w-full mt-1 bg-[#fff1f2] dark:bg-[#e71d36]/10 border border-[#e71d36]/20 py-1.5 px-2.5 rounded-md text-[11px] text-[#e71d36] font-medium flex items-start gap-1.5 leading-snug">
                     <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                    <span>Для Korter не хватает: {missingFields.join(', ')}. Укажите в тексте!</span>
+                    <span>Для публикации не хватает: {missingFields.join(', ')}. Пожалуйста, добавьте их в описание.</span>
                   </div>
                 )}
               </div>
@@ -572,8 +572,8 @@ function CreateTab({ uid, navigateToPlatforms }: { uid: string | null, navigateT
       <div className="sticky bottom-0 w-full p-4 bg-gradient-to-t from-[#f6f9fc] dark:from-[#050505] via-[#f6f9fc]/90 dark:via-[#050505]/90 to-transparent pb-8 z-40">
         <button 
           onClick={handlePublish}
-          disabled={isPublishing || !desc.trim()}
-          className={`w-full bg-[#15be53] hover:bg-[#12a849] disabled:opacity-50 text-white rounded-[14px] py-4 font-semibold text-[15px] transition-transform active:scale-[0.98] ${STRIPE_SHADOW} flex items-center justify-center gap-2`}>
+          disabled={isPublishing || !desc.trim() || missingFields.length > 0}
+          className={`w-full ${missingFields.length > 0 ? 'bg-gray-400 dark:bg-gray-700' : 'bg-[#15be53] hover:bg-[#12a849]'} disabled:opacity-50 text-white rounded-[14px] py-4 font-semibold text-[15px] transition-transform active:scale-[0.98] ${STRIPE_SHADOW} flex items-center justify-center gap-2`}>
           {isPublishing ? "Публикация..." : "Опубликовать"} <ArrowRight size={16} />
         </button>
       </div>
