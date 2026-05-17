@@ -11,8 +11,8 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { supabase } from '../lib/supabase';
 
 // Same shadow constants as LandingPage
-const STRIPE_SHADOW = "shadow-[0_13px_27px_-5px_rgba(50,50,93,0.05),0_8px_16px_-8px_rgba(0,0,0,0.03)] dark:shadow-none";
-const ELEVATE_SHADOW = "shadow-[0_30px_60px_-12px_rgba(50,50,93,0.15),0_18px_36px_-18px_rgba(0,0,0,0.1)] dark:shadow-none";
+const STRIPE_SHADOW = "shadow-sm border border-slate-200/80 dark:border-transparent dark:shadow-none";
+const ELEVATE_SHADOW = "shadow-xl shadow-slate-200/40 dark:shadow-none";
 
 const DUMMY_STYLES = [
   { id: 'selling', label: 'Продающий' },
@@ -119,20 +119,20 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   }, []);
 
   return (
-    <div className="fixed inset-0 flex justify-center w-full bg-[#f7f9fc] dark:bg-[#050505] font-sans text-[#061b31] dark:text-gray-200 selection:bg-[#533afd]/20 selection:text-[#533afd] transition-colors duration-500 overflow-hidden z-50">
-      <div className={`w-full h-full sm:max-w-[375px] sm:h-[750px] sm:my-auto bg-[#ffffff] dark:bg-[#0F0F0F] relative flex flex-col sm:rounded-[32px] sm:border border-[#e5edf5] dark:border-[#1A1A1A] ${ELEVATE_SHADOW} overflow-hidden transition-colors duration-500`}>
+    <div className="fixed inset-0 flex justify-center w-full bg-slate-50 dark:bg-[#050505] font-sans text-slate-900 dark:text-gray-200 selection:bg-[#533afd]/20 selection:text-[#533afd] transition-colors duration-500 overflow-hidden z-50">
+      <div className={`w-full h-full sm:max-w-[375px] sm:h-[750px] sm:my-auto bg-white dark:bg-[#0F0F0F] relative flex flex-col sm:rounded-[32px] sm:border border-slate-200/80 dark:border-[#1A1A1A] ${ELEVATE_SHADOW} overflow-hidden transition-colors duration-500`}>
         
         {/* Header theme toggle inside the phone app, right corner */}
         <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-          <button onClick={toggleTheme} className="p-2 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-full text-[#64748d] dark:text-gray-400 hover:text-[#533afd] dark:hover:text-white transition-colors" title="Сменить тему">
+          <button onClick={toggleTheme} className="p-2 bg-slate-100 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 rounded-full text-slate-600 dark:text-gray-400 hover:text-[#533afd] dark:hover:text-white transition-colors" title="Сменить тему">
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button onClick={() => (window.Telegram?.WebApp as any)?.close?.() || window.close()} className="px-3 py-1.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-[12px] font-semibold text-[12px] text-[#061b31] dark:text-white hover:text-red-500 dark:hover:text-red-400 transition-colors shadow-sm">
+          <button onClick={() => (window.Telegram?.WebApp as any)?.close?.() || window.close()} className="px-3 py-1.5 bg-slate-100 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 rounded-[12px] font-semibold text-[12px] text-slate-900 dark:text-white hover:text-red-500 dark:hover:text-red-400 transition-colors shadow-sm">
             Закрыть
           </button>
         </div>
 
-        <main className="flex-1 overflow-hidden relative bg-[#ffffff] dark:bg-[#0F0F0F] transition-colors duration-500">
+        <main className="flex-1 overflow-hidden relative bg-white dark:bg-[#0F0F0F] transition-colors duration-500">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -288,7 +288,7 @@ function CreateTab({
     if (!e.target.files?.length) return;
     const files = Array.from(e.target.files);
     
-    files.forEach(file => {
+    files.forEach((file: any) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         if (event.target?.result) {
@@ -339,11 +339,17 @@ function CreateTab({
         title: displayTitle === 'Объект' && parsedAddress ? parsedAddress : displayTitle,
         description: desc,
         status: 'publishing',
-        platforms: activePlatformNames
+        platforms: activePlatformNames,
+        cover_image: photos.length > 0 ? photos[0] : null
       };
 
-      const { data: docData, error } = await supabase.from('listings').insert([listingData]).select().single();
-      if (error) throw error;
+      const { data: docData, error } = await supabase.from('listings').insert([listingData] as any).select().single();
+      if (error) {
+         if (error.message.includes('cover_image')) {
+             throw new Error("Необходимо добавить колонку cover_image (text) в таблицу listings в Supabase. Воспользуйтесь SQL Editor.");
+         }
+         throw error;
+      }
       const docRef = docData;
       
       // Start publishing on Korter
@@ -359,20 +365,20 @@ function CreateTab({
       setParsedData(null);
       setAddressCoords(null);
       alert("Публикация начата. Вы можете следить за статусом в Истории объектов.");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Ошибка при публикации");
+      alert(`Ошибка при публикации: ${e.message}`);
     } finally {
       setIsPublishing(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/15 blur-[80px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/10 blur-[100px] rounded-full pointer-events-none" />
 
-      <div className="flex flex-col justify-start px-4 pt-4 pb-2 bg-[#ffffff]/90 dark:bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-[#e5edf5] dark:border-white/5 z-10 transition-colors">
+      <div className="flex flex-col justify-start px-4 pt-4 pb-2 bg-white/90 dark:bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-white/5 z-10 transition-colors">
         <div className="flex items-center gap-1.5 opacity-80 mb-2">
           <svg width="18" height="18" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="25" y="20" width="16" height="60" rx="4" className="fill-[#0a2540] dark:fill-white" />
@@ -381,28 +387,28 @@ function CreateTab({
           </svg>
           <span className="text-[15px] font-bold text-[#0a2540] dark:text-white tracking-tight">Karty</span>
         </div>
-        <h1 className="text-[26px] font-bold tracking-tight text-[#061b31] dark:text-white/90 leading-tight pr-12">Новое объявление</h1>
+        <h1 className="text-[26px] font-bold tracking-tight text-slate-900 dark:text-white/90 leading-tight pr-12">Новое объявление</h1>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-40">
         
         {/* Text Area block */}
         <div className="space-y-3">
-          <div className={`relative flex flex-col bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/10 rounded-2xl p-4 transition-all focus-within:border-[#533afd] focus-within:ring-4 focus-within:ring-[#533afd]/10 ${STRIPE_SHADOW}`}>
+          <div className={`relative flex flex-col bg-white dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/10 rounded-2xl p-4 transition-all focus-within:border-[#533afd] focus-within:ring-4 focus-within:ring-[#533afd]/10 ${STRIPE_SHADOW}`}>
             <textarea 
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               placeholder={"Например: 2к квартира у метро в Батуми, 55 метров, 120 000 $..."}
-              className="w-full h-32 bg-transparent text-[15px] sm:text-[16px] text-[#061b31] dark:text-gray-200 placeholder:text-[#64748d] dark:placeholder:text-gray-600 focus:outline-none resize-none border-none leading-relaxed" 
+              className="w-full h-32 bg-transparent text-[15px] sm:text-[16px] text-slate-900 dark:text-gray-200 placeholder:text-slate-600 dark:placeholder:text-gray-600 focus:outline-none resize-none border-none leading-relaxed" 
             />
             
-            <div className="mt-2 pt-3 border-t border-[#e5edf5] dark:border-white/5">
+            <div className="mt-2 pt-3 border-t border-slate-200/80 dark:border-white/5">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-[11px] uppercase tracking-wider text-[#64748d] dark:text-gray-500 font-bold flex items-center gap-1">
+                <span className="text-[11px] uppercase tracking-wider text-slate-600 dark:text-gray-500 font-bold flex items-center gap-1">
                   <Sparkles size={10} className="text-[#533afd] dark:text-blue-400" /> 
                   Распознано AI {isAiLoading && <span className="animate-pulse">...</span>}
                 </span>
-                <span className="text-[11px] text-[#a0aabf] dark:text-gray-600 font-medium">{desc.length}/2000</span>
+                <span className="text-[11px] text-slate-500 dark:text-gray-600 font-medium">{desc.length}/2000</span>
               </div>
 
               {showAddressConfirmation && parsedAddress && (
@@ -410,7 +416,7 @@ function CreateTab({
                   <div className="flex items-start gap-2 mb-2">
                     <MapPin size={16} className="text-[#15be53] shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[13px] text-[#061b31] dark:text-white font-medium leading-tight">
+                      <p className="text-[13px] text-slate-900 dark:text-white font-medium leading-tight">
                         Я нашел адрес: {parsedAddress}. <br/>Верно?
                       </p>
                     </div>
@@ -419,7 +425,7 @@ function CreateTab({
                     <button onClick={() => handleMapConfirmation(true)} className="flex-1 py-1.5 bg-[#15be53] hover:bg-[#12a849] text-white text-[12px] font-bold rounded-lg transition-colors">
                       Да, подтверждаю
                     </button>
-                    <button onClick={() => handleMapConfirmation(false)} className="flex-1 py-1.5 bg-[#ffffff] dark:bg-white/10 hover:bg-gray-50 dark:hover:bg-white/20 border border-[#e5edf5] dark:border-white/10 text-[12px] font-bold text-[#061b31] dark:text-white rounded-lg transition-colors">
+                    <button onClick={() => handleMapConfirmation(false)} className="flex-1 py-1.5 bg-white dark:bg-white/10 hover:bg-gray-50 dark:hover:bg-white/20 border border-slate-200/80 dark:border-white/10 text-[12px] font-bold text-slate-900 dark:text-white rounded-lg transition-colors">
                       Уточнить на карте
                     </button>
                   </div>
@@ -427,25 +433,25 @@ function CreateTab({
               )}
 
               <div className="flex flex-wrap gap-1.5 min-h-[26px]">
-                {(!parsedAddress && !parsedArea && !parsedPrice && !parsedRooms) && <span className="text-[11px] text-[#a0aabf] dark:text-gray-600 font-medium my-auto">Начните вводить текст...</span>}
+                {(!parsedAddress && !parsedArea && !parsedPrice && !parsedRooms) && <span className="text-[11px] text-slate-500 dark:text-gray-600 font-medium my-auto">Начните вводить текст...</span>}
                 {parsedAddress && (
-                  <div className="flex items-center gap-1.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 px-2.5 py-1 rounded-md text-[11px] transition-all">
-                    <span className="text-[#a0aabf]">📍 Адрес:</span> <span className="font-semibold text-[#061b31] dark:text-white">{parsedAddress}</span>
+                  <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 px-2.5 py-1 rounded-md text-[11px] transition-all">
+                    <span className="text-slate-500">📍 Адрес:</span> <span className="font-semibold text-slate-900 dark:text-white">{parsedAddress}</span>
                   </div>
                 )}
                 {parsedArea && (
-                  <div className="flex items-center gap-1.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 px-2.5 py-1 rounded-md text-[11px] transition-all">
-                    <span className="text-[#a0aabf]">📏 Площадь:</span> <span className="font-semibold text-[#061b31] dark:text-white">{parsedArea}</span>
+                  <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 px-2.5 py-1 rounded-md text-[11px] transition-all">
+                    <span className="text-slate-500">📏 Площадь:</span> <span className="font-semibold text-slate-900 dark:text-white">{parsedArea}</span>
                   </div>
                 )}
                 {parsedPrice && (
-                  <div className="flex items-center gap-1.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 px-2.5 py-1 rounded-md text-[11px] transition-all">
-                    <span className="text-[#a0aabf]">💰 Цена:</span> <span className="font-semibold text-[#061b31] dark:text-white">{parsedPrice}</span>
+                  <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 px-2.5 py-1 rounded-md text-[11px] transition-all">
+                    <span className="text-slate-500">💰 Цена:</span> <span className="font-semibold text-slate-900 dark:text-white">{parsedPrice}</span>
                   </div>
                 )}
                 {parsedRooms && (
-                  <div className="flex items-center gap-1.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 px-2.5 py-1 rounded-md text-[11px] transition-all">
-                    <span className="text-[#a0aabf]">🛏 Комнат:</span> <span className="font-semibold text-[#061b31] dark:text-white">{parsedRooms}</span>
+                  <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 px-2.5 py-1 rounded-md text-[11px] transition-all">
+                    <span className="text-slate-500">🛏 Комнат:</span> <span className="font-semibold text-slate-900 dark:text-white">{parsedRooms}</span>
                   </div>
                 )}
                 {missingFields.length > 0 && (
@@ -465,11 +471,11 @@ function CreateTab({
                 onClick={() => handleStyleClick(style.id)}
                 disabled={activeEnhance !== null}
                 className={`w-full justify-center px-3 py-2 rounded-lg text-[13px] sm:text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                  selectedStyle === style.id && style.id !== 'original'
-                    ? 'bg-[#533afd] text-white shadow-md shadow-[#533afd]/20' 
-                    : selectedStyle === style.id && style.id === 'original'
-                    ? 'bg-[#061b31] dark:bg-white text-white dark:text-black' 
-                    : 'bg-[#ffffff] dark:bg-white/[0.03] text-[#64748d] dark:text-gray-400 border border-[#e5edf5] dark:border-white/10 hover:border-[#533afd]/30 dark:hover:border-white/20 hover:bg-[#533afd]/5 dark:hover:bg-white/[0.08]'
+                  selectedStyle === style.id && style.id === 'original'
+                    ? 'bg-[#061b31] dark:bg-white text-white dark:text-black shadow-md'
+                    : selectedStyle === style.id
+                    ? 'bg-[#533afd] text-white shadow-md shadow-[#533afd]/20'
+                    : 'bg-white dark:bg-white/[0.03] text-slate-600 dark:text-gray-400 border border-slate-200/80 dark:border-white/10 hover:border-slate-200/80 dark:hover:border-white/20'
                 } ${activeEnhance !== null ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {activeEnhance === style.id ? (
@@ -485,9 +491,9 @@ function CreateTab({
 
         {/* Photos */}
         <div className="space-y-3">
-          <h3 className="text-[12px] uppercase tracking-wider text-[#64748d] dark:text-gray-500 font-bold">Фотографии</h3>
+          <h3 className="text-[12px] uppercase tracking-wider text-slate-600 dark:text-gray-500 font-bold">Фотографии</h3>
           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-            <label className="shrink-0 w-28 h-28 rounded-[16px] bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/10 flex flex-col items-center justify-center gap-2 text-[#64748d] dark:text-gray-400 hover:text-[#533afd] dark:hover:text-white hover:bg-[#f6f9fc] dark:hover:bg-white/[0.05] hover:border-[#533afd]/40 dark:hover:border-white/20 transition-all active:scale-95 shadow-sm dark:shadow-none cursor-pointer">
+            <label className="shrink-0 w-28 h-28 rounded-[16px] bg-white dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/10 flex flex-col items-center justify-center gap-2 text-slate-600 dark:text-gray-400 hover:text-[#533afd] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] hover:border-[#533afd]/40 dark:hover:border-white/20 transition-all active:scale-95 shadow-sm dark:shadow-none cursor-pointer">
               <input type="file" multiple accept="image/*" className="hidden" onChange={handleAddPhotos} />
               <Camera size={24} />
               <span className="text-[12px] font-medium">Добавить</span>
@@ -496,7 +502,7 @@ function CreateTab({
             {photos.map((photo, i) => (
               <div 
                 key={i} 
-                className={`relative shrink-0 w-28 h-28 rounded-[16px] ${i === 0 ? 'border-2 border-[#533afd]' : 'border border-[#e5edf5] dark:border-transparent'} overflow-hidden ${STRIPE_SHADOW} cursor-pointer`}
+                className={`relative shrink-0 w-28 h-28 rounded-[16px] ${i === 0 ? 'border-2 border-[#533afd]' : 'border border-slate-200/80 dark:border-transparent'} overflow-hidden ${STRIPE_SHADOW} cursor-pointer`}
                 onClick={() => i !== 0 && setMainPhoto(i)}
               >
                 <img src={photo} alt={`Upload ${i}`} className="w-full h-full object-cover" />
@@ -512,7 +518,7 @@ function CreateTab({
                 )}
                 <button 
                   onClick={(e) => { e.stopPropagation(); removePhoto(i); }} 
-                  className="absolute top-2 right-2 p-1.5 bg-[#ffffff] dark:bg-black/50 rounded-full text-[#64748d] dark:text-white/70 hover:text-[#e71d36] dark:hover:text-red-400 shadow-sm transition-colors backdrop-blur-md z-10"
+                  className="absolute top-2 right-2 p-1.5 bg-white dark:bg-black/50 rounded-full text-slate-600 dark:text-white/70 hover:text-[#e71d36] dark:hover:text-red-400 shadow-sm transition-colors backdrop-blur-md z-10"
                 >
                   <X size={12} />
                 </button>
@@ -523,12 +529,12 @@ function CreateTab({
 
         {/* Platforms */}
         <div className="space-y-3 pb-24">
-          <h3 className="text-[12px] uppercase tracking-wider text-[#64748d] dark:text-gray-500 font-bold">Площадки для публикации</h3>
+          <h3 className="text-[12px] uppercase tracking-wider text-slate-600 dark:text-gray-500 font-bold">Площадки для публикации</h3>
           <div className="space-y-2">
-            <PlatformCheckbox onClick={() => togglePlatform('korter')} name="Korter" active={!!selectedPlatforms['korter']} isConnected={!!sessions['korter']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
-            <PlatformCheckbox onClick={() => togglePlatform('ssge')} name="SS.ge" active={!!selectedPlatforms['ssge']} isConnected={!!sessions['ssge']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
-            <PlatformCheckbox onClick={() => togglePlatform('realting')} name="Realting" active={!!selectedPlatforms['realting']} isConnected={!!sessions['realting']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
-            <PlatformCheckbox onClick={() => togglePlatform('myhome')} name="MyHome" active={!!selectedPlatforms['myhome']} isConnected={!!sessions['myhome']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
+            <PlatformCheckbox onClick={() => togglePlatform('korter')} name="Korter" active={!!selectedPlatforms['korter']} isConnected={!!sessions['korter']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-slate-900 dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
+            <PlatformCheckbox onClick={() => togglePlatform('ssge')} name="SS.ge" active={!!selectedPlatforms['ssge']} isConnected={!!sessions['ssge']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-slate-900 dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
+            <PlatformCheckbox onClick={() => togglePlatform('realting')} name="Realting" active={!!selectedPlatforms['realting']} isConnected={!!sessions['realting']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-slate-900 dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
+            <PlatformCheckbox onClick={() => togglePlatform('myhome')} name="MyHome" active={!!selectedPlatforms['myhome']} isConnected={!!sessions['myhome']} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-slate-900 dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
           </div>
         </div>
       </div>
@@ -543,8 +549,8 @@ function CreateTab({
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="absolute inset-0 z-[100] bg-white dark:bg-[#0F0F0F] flex flex-col"
           >
-            <div className="flex justify-between items-center p-4 border-b border-[#e5edf5] dark:border-[#1A1A1A] bg-white/50 dark:bg-black/50 backdrop-blur-md absolute top-0 w-full z-10">
-              <h3 className="font-bold text-[16px] text-[#061b31] dark:text-white">Укажите точку</h3>
+            <div className="flex justify-between items-center p-4 border-b border-slate-200/80 dark:border-[#1A1A1A] bg-white/50 dark:bg-black/50 backdrop-blur-md absolute top-0 w-full z-10">
+              <h3 className="font-bold text-[16px] text-slate-900 dark:text-white">Укажите точку</h3>
               <button onClick={() => setShowFullscreenMap(false)} className="p-2 bg-gray-100 dark:bg-white/10 rounded-full">
                 <X size={18} />
               </button>
@@ -581,7 +587,7 @@ function CreateTab({
               })()}
             </div>
             
-            <div className="p-4 border-t border-[#e5edf5] dark:border-[#1A1A1A]">
+            <div className="p-4 border-t border-slate-200/80 dark:border-[#1A1A1A]">
               <button 
                 onClick={() => setShowFullscreenMap(false)} 
                 className="w-full bg-[#533afd] hover:bg-[#4434d4] text-white rounded-xl py-3 font-semibold text-[15px] transition-transform active:scale-[0.98]">
@@ -651,20 +657,20 @@ function PlatformsTab({ uid }: { uid: string | null }) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/15 blur-[80px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/10 blur-[100px] rounded-full pointer-events-none" />
 
-      <div className="flex flex-col px-4 pt-4 pb-2 bg-[#ffffff]/90 dark:bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-[#e5edf5] dark:border-white/5 z-10 transition-colors">
-        <h1 className="text-[26px] font-bold tracking-tight text-[#061b31] dark:text-white/90 leading-tight">Авторизация</h1>
-        <p className="text-[#64748d] dark:text-gray-400 text-sm mt-1">Управление сессиями площадок</p>
+      <div className="flex flex-col px-4 pt-4 pb-2 bg-white/90 dark:bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-white/5 z-10 transition-colors">
+        <h1 className="text-[26px] font-bold tracking-tight text-slate-900 dark:text-white/90 leading-tight">Авторизация</h1>
+        <p className="text-slate-600 dark:text-gray-400 text-sm mt-1">Управление сессиями площадок</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-8">
-        <PlatformAuthCard siteKey="korter" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="Korter" isConnected={!!sessions['korter']} total={sessions['korter'] ? 245 : 0} activeViews={sessions['korter'] ? 1240 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
-        <PlatformAuthCard siteKey="ssge" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="SS.ge" isConnected={!!sessions['ssge']} total={sessions['ssge'] ? 42 : 0} activeViews={sessions['ssge'] ? 380 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
-        <PlatformAuthCard siteKey="realting" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="Realting" isConnected={!!sessions['realting']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
-        <PlatformAuthCard siteKey="myhome" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="MyHome" isConnected={!!sessions['myhome']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-[#061b31] dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="korter" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="Korter" isConnected={!!sessions['korter']} total={sessions['korter'] ? 245 : 0} activeViews={sessions['korter'] ? 1240 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-slate-900 dark:text-white" logo={<KorterIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="ssge" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="SS.ge" isConnected={!!sessions['ssge']} total={sessions['ssge'] ? 42 : 0} activeViews={sessions['ssge'] ? 380 : 0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-slate-900 dark:text-white" logo={<SSIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="realting" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="Realting" isConnected={!!sessions['realting']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-slate-900 dark:text-white" logo={<RealtingIcon className="w-4 h-4" />} />
+        <PlatformAuthCard siteKey="myhome" onAuth={handleStartAuth} onRemoveSession={handleRemoveSession} name="MyHome" isConnected={!!sessions['myhome']} total={0} activeViews={0} logoBg="bg-gray-100 dark:bg-white/5" logoColor="text-slate-900 dark:text-white" logo={<MyHomeIcon className="w-4 h-4" />} />
       </div>
     </div>
   );
@@ -672,13 +678,13 @@ function PlatformsTab({ uid }: { uid: string | null }) {
 
 function PlatformCheckbox({ name, active, isConnected, logoBg, logoColor, logo, onClick }: any) {
   return (
-    <div onClick={onClick} className={`flex items-center justify-between p-3 rounded-[14px] bg-[#ffffff] dark:bg-white/[0.02] border ${isConnected === false ? 'border-dashed border-[#e5edf5] dark:border-white/5 opacity-70' : 'border-[#e5edf5] dark:border-white/5'} hover:border-[#c1d1e0] dark:hover:border-white/10 shadow-sm dark:shadow-none cursor-pointer transition-colors`}>
+    <div onClick={onClick} className={`flex items-center justify-between p-3 rounded-[14px] bg-white dark:bg-white/[0.02] border ${isConnected === false ? 'border-dashed border-slate-200/80 dark:border-white/5 opacity-70' : 'border-slate-200/80 dark:border-white/5'} hover:border-[#c1d1e0] dark:hover:border-white/10 shadow-sm dark:shadow-none cursor-pointer transition-colors`}>
       <div className="flex items-center gap-3">
-        <div className={`relative w-8 h-8 rounded-full ${logoBg} flex items-center justify-center ${logoColor} font-bold text-sm border border-[#e5edf5] dark:border-white/5`}>
+        <div className={`relative w-8 h-8 rounded-full ${logoBg} flex items-center justify-center ${logoColor} font-bold text-sm border border-slate-200/80 dark:border-white/5`}>
           {logo}
         </div>
         <div>
-          <p className="text-[14px] font-semibold text-[#061b31] dark:text-white/90 leading-tight">{name}</p>
+          <p className="text-[14px] font-semibold text-slate-900 dark:text-white/90 leading-tight">{name}</p>
           {isConnected === false && (
             <p className="text-[10px] text-[#ff4264] mt-0.5">Требуется вход</p>
           )}
@@ -711,14 +717,14 @@ function PlatformAuthCard({ name, siteKey, isConnected, total, activeViews, logo
   };
 
   return (
-    <div className="flex flex-col p-4 rounded-[16px] bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/5 shadow-sm dark:shadow-none transition-colors relative">
+    <div className="flex flex-col p-4 rounded-[16px] bg-white dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/5 shadow-sm dark:shadow-none transition-colors relative">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-full ${logoBg} flex items-center justify-center ${logoColor} font-bold text-lg border border-[#e5edf5] dark:border-white/5`}>
+          <div className={`w-10 h-10 rounded-full ${logoBg} flex items-center justify-center ${logoColor} font-bold text-lg border border-slate-200/80 dark:border-white/5`}>
             {logo}
           </div>
           <div>
-            <p className="text-[15px] font-semibold text-[#061b31] dark:text-white/90 leading-tight">{name}</p>
+            <p className="text-[15px] font-semibold text-slate-900 dark:text-white/90 leading-tight">{name}</p>
             <p className={`text-[11px] font-bold mt-0.5 ${isConnected ? 'text-[#15be53]' : 'text-[#ff4264] dark:text-red-400'}`}>
               {isConnected ? '• Сессия активна' : '• Требуется вход'}
             </p>
@@ -728,14 +734,14 @@ function PlatformAuthCard({ name, siteKey, isConnected, total, activeViews, logo
       
       {isConnected ? (
         <div className="flex flex-col">
-          <div className="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-[#e5edf5] dark:border-white/5 mb-3">
+          <div className="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-slate-200/80 dark:border-white/5 mb-3">
             <div className="flex flex-col">
-              <span className="text-[11px] text-[#64748d] dark:text-gray-500 uppercase font-bold tracking-wider">Всего объектов</span>
-              <span className="text-[16px] font-semibold text-[#061b31] dark:text-white mt-0.5">{total}</span>
+              <span className="text-[11px] text-slate-600 dark:text-gray-500 uppercase font-bold tracking-wider">Всего объектов</span>
+              <span className="text-[16px] font-semibold text-slate-900 dark:text-white mt-0.5">{total}</span>
             </div>
             <div className="flex flex-col">
-               <span className="text-[11px] text-[#64748d] dark:text-gray-500 uppercase font-bold tracking-wider">Просмотров за 30 дн.</span>
-               <span className="text-[16px] font-semibold text-[#061b31] dark:text-white mt-0.5">{activeViews}</span>
+               <span className="text-[11px] text-slate-600 dark:text-gray-500 uppercase font-bold tracking-wider">Просмотров за 30 дн.</span>
+               <span className="text-[16px] font-semibold text-slate-900 dark:text-white mt-0.5">{activeViews}</span>
              </div>
           </div>
           <div className="flex gap-2">
@@ -748,7 +754,7 @@ function PlatformAuthCard({ name, siteKey, isConnected, total, activeViews, logo
             <button 
               onClick={handleRemove}
               disabled={isLoading}
-              className="shrink-0 bg-[#f6f9fc] text-[#ff4264] dark:bg-red-500/10 dark:text-red-400 px-4 py-2.5 rounded-lg text-sm font-semibold active:scale-95 transition-all text-center border border-red-500/10 disabled:opacity-50"
+              className="shrink-0 bg-slate-100 text-[#ff4264] dark:bg-red-500/10 dark:text-red-400 px-4 py-2.5 rounded-lg text-sm font-semibold active:scale-95 transition-all text-center border border-red-500/10 disabled:opacity-50"
               title="Отключить"
             >
               {isLoading ? "..." : "Отключить"}
@@ -756,7 +762,7 @@ function PlatformAuthCard({ name, siteKey, isConnected, total, activeViews, logo
           </div>
         </div>
       ) : (
-        <div className="mt-2 pt-3 border-t border-[#e5edf5] dark:border-white/5 flex gap-2">
+        <div className="mt-2 pt-3 border-t border-slate-200/80 dark:border-white/5 flex gap-2">
           <button 
             onClick={handleAuth}
             disabled={isLoading}
@@ -792,7 +798,7 @@ function HistoryTab({ uid }: { uid: string | null }) {
            date: d.created_at || d.date,
            platforms: d.platforms,
            status: d.status,
-           image: d.image,
+           image: d.cover_image,
            userId: d.user_id
          })) as HistoryItem[]);
       }
@@ -817,31 +823,31 @@ function HistoryTab({ uid }: { uid: string | null }) {
   }, [uid]);
 
   return (
-    <div className="flex flex-col h-full bg-[#fcfdfd] dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-[#0A0A0A] transition-colors duration-500 relative overflow-hidden">
       <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/15 blur-[80px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/10 blur-[100px] rounded-full pointer-events-none" />
 
-      <div className="flex flex-col px-4 pt-4 pb-4 bg-[#ffffff]/90 dark:bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-[#e5edf5] dark:border-white/5 z-10 transition-colors">
-        <h1 className="text-[26px] font-bold tracking-tight text-[#061b31] dark:text-white/90 leading-tight">Мои объекты</h1>
+      <div className="flex flex-col px-4 pt-4 pb-4 bg-white/90 dark:bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-white/5 z-10 transition-colors">
+        <h1 className="text-[26px] font-bold tracking-tight text-slate-900 dark:text-white/90 leading-tight">Мои объекты</h1>
         
         {/* Search / Filter bar mock */}
         <div className="mt-4 flex gap-2">
-          <div className="flex-1 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-[12px] px-3 py-2 text-sm text-[#64748d] dark:text-gray-400 flex items-center">
+          <div className="flex-1 bg-slate-100 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 rounded-[12px] px-3 py-2 text-sm text-slate-600 dark:text-gray-400 flex items-center">
             Поиск по адресу...
           </div>
-          <button className="w-10 h-10 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-[12px] flex items-center justify-center text-[#64748d] dark:text-gray-400">
+          <button className="w-10 h-10 bg-slate-100 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 rounded-[12px] flex items-center justify-center text-slate-600 dark:text-gray-400">
             <RefreshCcw size={16} />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-8 text-[#061b31] dark:text-gray-200">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-8 text-slate-900 dark:text-gray-200">
         {loading && <p className="text-center text-sm text-gray-500 mt-4">Загрузка...</p>}
         {!loading && history.length === 0 && <p className="text-center text-sm text-gray-500 mt-4">У вас пока нет объектов.</p>}
         {history.map((item) => (
-          <div key={item.id} className="bg-[#ffffff] dark:bg-white/[0.02] border border-[#e5edf5] dark:border-white/5 rounded-[16px] p-3 shadow-sm dark:shadow-none transition-colors">
+          <div key={item.id} className="bg-white dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/5 rounded-[16px] p-3 shadow-sm dark:shadow-none transition-colors">
             <div className="flex gap-3">
-              <div className="w-[72px] h-[72px] rounded-[10px] bg-[#f6f9fc] dark:bg-white/[0.05] border border-[#e5edf5] dark:border-white/5 shrink-0 overflow-hidden flex items-center justify-center text-gray-300 dark:text-gray-600 transition-colors">
+              <div className="w-[72px] h-[72px] rounded-[10px] bg-slate-100 dark:bg-white/[0.05] border border-slate-200/80 dark:border-white/5 shrink-0 overflow-hidden flex items-center justify-center text-gray-300 dark:text-gray-600 transition-colors">
                 {item.image ? (
                   <img src={item.image} className="w-full h-full object-cover" />
                 ) : (
@@ -850,13 +856,13 @@ function HistoryTab({ uid }: { uid: string | null }) {
               </div>
               <div className="flex-1 min-w-0 py-1">
                 <div className="flex justify-between items-start">
-                  <h3 className="font-semibold text-[14px] text-[#061b31] dark:text-white/90 truncate pr-2">{item.title}</h3>
-                  <button className="text-[#a0aabf] dark:text-gray-500 hover:text-[#061b31] dark:hover:text-white shrink-0">
+                  <h3 className="font-semibold text-[14px] text-slate-900 dark:text-white/90 truncate pr-2">{item.title}</h3>
+                  <button className="text-slate-500 dark:text-gray-500 hover:text-slate-900 dark:hover:text-white shrink-0">
                     <MoreVertical size={16} />
                   </button>
                 </div>
-                <p className="text-[12px] text-[#64748d] dark:text-gray-400 mt-1 line-clamp-2 leading-snug">{item.desc}</p>
-                <p className="text-[11px] text-[#a0aabf] dark:text-gray-500 mt-1.5">
+                <p className="text-[12px] text-slate-600 dark:text-gray-400 mt-1 line-clamp-2 leading-snug">{item.desc}</p>
+                <p className="text-[11px] text-slate-500 dark:text-gray-500 mt-1.5">
                   {new Date(item.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                 </p>
                 
@@ -870,9 +876,9 @@ function HistoryTab({ uid }: { uid: string | null }) {
             </div>
             
             {/* Platforms row */}
-            <div className="mt-3 pt-3 border-t border-[#e5edf5] dark:border-white/5 flex gap-2">
+            <div className="mt-3 pt-3 border-t border-slate-200/80 dark:border-white/5 flex gap-2">
                {item.platforms.map(p => (
-                 <div key={p} className="text-[10px] uppercase font-bold px-2 py-1 bg-[#f6f9fc] dark:bg-white/5 text-[#64748d] dark:text-gray-400 rounded-md border border-[#e5edf5] dark:border-white/5">
+                 <div key={p} className="text-[10px] uppercase font-bold px-2 py-1 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-gray-400 rounded-md border border-slate-200/80 dark:border-white/5">
                    {p}
                  </div>
                ))}
@@ -888,7 +894,7 @@ function StatusBadge({ type, text }: { type: 'success' | 'neutral' | 'error' | '
   const colors = {
     success: 'bg-[#15be53]/10 text-[#15be53] dark:bg-emerald-500/10 dark:text-emerald-400',
     publishing: 'bg-[#533afd]/10 text-[#533afd] dark:bg-[#533afd]/20 dark:text-blue-400 animate-pulse',
-    neutral: 'bg-gray-100 text-[#64748d] dark:bg-gray-500/10 dark:text-gray-400',
+    neutral: 'bg-gray-100 text-slate-600 dark:bg-gray-500/10 dark:text-gray-400',
     error: 'bg-[#ff4264]/10 text-[#ff4264] dark:bg-red-500/10 dark:text-red-400',
   };
   
@@ -901,7 +907,7 @@ function StatusBadge({ type, text }: { type: 'success' | 'neutral' | 'error' | '
 
 function BottomBar({ activeTab, onTabChange }: { activeTab: TabType, onTabChange: (t: TabType) => void }) {
   return (
-    <div className="w-full h-[80px] shrink-0 bg-[#ffffff]/90 dark:bg-[#0F0F0F]/90 backdrop-blur-xl border-t border-[#e5edf5] dark:border-white/5 px-8 flex justify-between items-center z-50 pb-safe transition-colors duration-500">
+    <div className="w-full h-[80px] shrink-0 bg-white/90 dark:bg-[#0F0F0F]/90 backdrop-blur-xl border-t border-slate-200/80 dark:border-white/5 px-8 flex justify-between items-center z-50 pb-safe transition-colors duration-500">
       <NavItem 
         icon={<FilePlus2 size={24} strokeWidth={activeTab === 'create' ? 2.5 : 2} />} 
         label="Новое" 
@@ -931,13 +937,13 @@ function NavItem({ icon, label, isActive, onClick }: { icon: React.ReactNode, la
       className={`flex flex-col items-center gap-1 transition-colors ${
         isActive 
         ? "text-[#533afd] dark:text-blue-500" 
-        : "text-[#a0aabf] dark:text-gray-500 hover:text-[#64748d] dark:hover:text-gray-400"
+        : "text-slate-500 dark:text-gray-500 hover:text-slate-600 dark:hover:text-gray-400"
       }`}
     >
       <div className={`transition-transform duration-300 ${isActive ? "scale-110" : "scale-100"}`}>
         {icon}
       </div>
-      <span className={`text-[10px] ${isActive ? "font-bold text-[#061b31] dark:text-white/90" : "font-semibold"} transition-colors`}>{label}</span>
+      <span className={`text-[10px] ${isActive ? "font-bold text-slate-900 dark:text-white/90" : "font-semibold"} transition-colors`}>{label}</span>
     </button>
   );
 }

@@ -16,6 +16,7 @@ CREATE TABLE listings (
   description text,
   status text not null default 'draft',
   platforms jsonb default '[]'::jsonb,
+  cover_image text,
   created_at timestamp with time zone default now(),
   korter_url text,
   error_details text

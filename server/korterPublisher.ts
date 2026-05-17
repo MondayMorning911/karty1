@@ -117,20 +117,77 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       // Тип сделки
       if (parsed.dealType) {
         const targetDealText = parsed.dealType === 'Посуточная аренда' ? 'Посуточная аренда' : parsed.dealType === 'Долгосрочная аренда' ? 'Долгосрочная аренда' : 'Продажа';
-        // Select base category wrapper maybe
-        const dealBoxes = page.locator('div.s4r9iw1, div.lxrdcjb', { hasText: new RegExp(`^${targetDealText}$`) });
-        if (await dealBoxes.first().isVisible().catch(()=>false)) {
-            await dealBoxes.first().click().catch(()=>{});
+        let foundDealType = false;
+        try {
+            console.log(`[Korter] Setting dealType to ${targetDealText}`);
+            // Find "Тип сделки" trigger and click it
+            const dealDropdowns = page.locator('text="Тип сделки"');
+            if (await dealDropdowns.count() > 0) {
+               await dealDropdowns.last().click({ force: true }).catch(()=>{});
+            } else {
+               await page.getByText('Тип сделки', { exact: false }).last().click({ force: true }).catch(()=>{});
+            }
+            await delay(1000);
+            
+            // Try to find the correct option
+            const opt = page.locator(`css=div:has-text("${targetDealText}")`).filter({ hasText: new RegExp(`^${targetDealText}$`) }).last();
+            if (await opt.isVisible().catch(()=>false)) {
+                await opt.click({ force: true });
+                foundDealType = true;
+            } else {
+               // Fallback: exact match text
+               const fallbackOpt = page.getByText(targetDealText, { exact: true }).last();
+               await fallbackOpt.click({ force: true });
+               foundDealType = true;
+            }
             await delay(500);
+        } catch(e) {
+            console.log("Failed modern dealType");
+        }
+
+        if (!foundDealType) {
+            // Old select approach
+            const dealBoxes = page.locator('div.s4r9iw1, div.lxrdcjb', { hasText: new RegExp(`^${targetDealText}$`) });
+            if (await dealBoxes.first().isVisible().catch(()=>false)) {
+                await dealBoxes.first().click().catch(()=>{});
+                await delay(500);
+            }
         }
       }
 
       // Тип недвижимости
       if (parsed.propertyType) {
-        const typeBoxes = page.locator('div.s4r9iw1, div.lxrdcjb', { hasText: new RegExp(`^${parsed.propertyType}$`) });
-        if (await typeBoxes.first().isVisible().catch(()=>false)) {
-            await typeBoxes.first().click().catch(()=>{});
+        let foundPropType = false;
+        try {
+            console.log(`[Korter] Setting propertyType to ${parsed.propertyType}`);
+            const propDropdowns = page.locator('text="Тип недвижимости"');
+            if (await propDropdowns.count() > 0) {
+               await propDropdowns.last().click({ force: true }).catch(()=>{});
+            } else {
+               await page.getByText('Тип недвижимости', { exact: false }).last().click({ force: true }).catch(()=>{});
+            }
+            await delay(1000);
+            
+            const opt = page.locator(`css=div:has-text("${parsed.propertyType}")`).filter({ hasText: new RegExp(`^${parsed.propertyType}$`) }).last();
+            if (await opt.isVisible().catch(()=>false)) {
+                await opt.click({ force: true });
+                foundPropType = true;
+            } else {
+               const fallbackOpt = page.getByText(parsed.propertyType, { exact: true }).last();
+               await fallbackOpt.click({ force: true });
+               foundPropType = true;
+            }
             await delay(500);
+        } catch(e) {
+            console.log("Failed modern propertyType");
+        }
+
+        if (!foundPropType) {
+            const typeBoxes = page.locator('div.s4r9iw1, div.lxrdcjb', { hasText: new RegExp(`^${parsed.propertyType}$`) });
+            if (await typeBoxes.first().isVisible().catch(()=>false)) {
+                await typeBoxes.first().click().catch(()=>{});
+                await delay(500);
+            }
         }
       }
 
