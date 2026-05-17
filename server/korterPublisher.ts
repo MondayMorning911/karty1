@@ -90,7 +90,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       },
       body: JSON.stringify({
         proxyUrl: 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@res.proxy-seller.com:10000',
-        isStealth: true
+        isStealth: true,
+        blockAds: false
       })
     });
     
@@ -223,6 +224,14 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       }
 
       // Город и Адрес
+      try {
+          const mapCanvas = page.locator('canvas.mapboxgl-canvas').first();
+          if (await mapCanvas.isVisible().catch(()=>false)) {
+              await mapCanvas.scrollIntoViewIfNeeded().catch(()=>{});
+              await delay(2000); // give map time to load tiles
+          }
+      } catch (e) {}
+
       if (parsed.city) {
           const mskInput = page.locator('input[name="custom.geoObjectSearch"]').first();
           if (await mskInput.isVisible().catch(()=>false)) {
@@ -346,11 +355,12 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       if (photos && photos.length > 0) {
           try {
               console.log(`[KorterPublisher] Uploading ${photos.length} photos...`);
-              const fileBuffers = photos.map((dataUrl: string, idx: number) => {
+                const fileBuffers = photos.map((dataUrl: string, idx: number) => {
                   const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
                   if (!match) return null;
                   const mimeType = match[1];
-                  const ext = mimeType.split('/')[1] || 'jpg';
+                  let ext = mimeType.split('/')[1] || 'jpg';
+                  if (ext === 'jpeg') ext = 'jpg';
                   return {
                       name: `photo_${idx}.${ext}`,
                       mimeType,
@@ -363,7 +373,12 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   if (await fileInput.count() > 0) {
                       await fileInput.setInputFiles(fileBuffers as any);
                       // wait for uploads to process
-                      await delay(photos.length * 1500 + 2000); 
+                      await delay(photos.length * 2000 + 3000);
+                      
+                      const photoErrors = await page.locator('text="удалите или обновите загруженные фотографии"').count();
+                      if (photoErrors > 0) {
+                          console.warn("[Korter] There is a photo error on the page. We might need to handle this manually.");
+                      }
                   } else {
                       console.warn("[KorterPublisher] Could not find file input for photos");
                   }
