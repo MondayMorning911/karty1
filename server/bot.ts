@@ -15,7 +15,7 @@ export function startBot() {
     return;
   }
 
-  const proxyUrl = process.env.TELEGRAM_PROXY_URL || process.env.PROXY_URL || 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@141.98.54.148:10000';
+  const proxyUrl = process.env.TELEGRAM_PROXY_URL || process.env.PROXY_URL;
   let requestOpts: any = undefined;
   
   if (proxyUrl) {

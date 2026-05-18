@@ -80,39 +80,29 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     }
     const state = sessionData.state; // playwright storage state
     
-    // 3. Запускаем Steel браузер
-    const STEEL_API_KEY = process.env.STEEL_API_KEY || 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6';
-    const sessionResponse = await fetch('https://api.steel.dev/v1/sessions', {
+    // 3. Запускаем Browserbase браузер
+    const BROWSERBASE_API_KEY = process.env.BROWSERBASE_API_KEY || 'bb_live_5oJ0ciNxBPE2UuE1HbrC4JEvBDw';
+    const BROWSERBASE_PROJECT_ID = process.env.BROWSERBASE_PROJECT_ID || '7f1b4130-5234-4500-b051-9f330df88506';
+
+    const sessionResponse = await fetch('https://api.browserbase.com/v1/sessions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'steel-api-key': STEEL_API_KEY
+        'X-BB-API-Key': BROWSERBASE_API_KEY
       },
       body: JSON.stringify({
-        proxyUrl: 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@res.proxy-seller.com:10000',
-        isStealth: true,
-        blockAds: false,
-        launchOptions: {
-          args: [
-            '--disable-blink-features=AutomationControlled',
-            '--use-gl=angle',
-            '--use-angle=swiftshader',
-            '--ignore-gpu-blocklist',
-            '--disable-webkit-shared-image-cache',
-            '--headless=new',
-            '--enable-webgl'
-          ]
-        }
+        projectId: BROWSERBASE_PROJECT_ID,
+        proxies: true
       })
     });
     
     if (!sessionResponse.ok) {
-        throw new Error(`Steel session creation failed: ${await sessionResponse.text()}`);
+        throw new Error(`Browserbase session creation failed: ${await sessionResponse.text()}`);
     }
-    const steelSessionData = await sessionResponse.json();
-    const sessionId = steelSessionData.id;
+    const bbSessionData = await sessionResponse.json();
+    const sessionId = bbSessionData.id;
 
-    const browser = await chromium.connectOverCDP(`wss://connect.steel.dev?apiKey=${STEEL_API_KEY}&sessionId=${sessionId}`);
+    const browser = await chromium.connectOverCDP(`wss://connect.browserbase.com?apiKey=${BROWSERBASE_API_KEY}&sessionId=${sessionId}`);
     
     try {
       console.log(`[KorterPublisher] Opened browser, applying state...`);
@@ -693,10 +683,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
 
       await browser.close().catch(()=>{});
       
-      await fetch(`https://api.steel.dev/v1/sessions/${sessionId}/release`, {
-        method: 'POST',
-        headers: { 'steel-api-key': STEEL_API_KEY }
-      }).catch(()=>{});
+      console.log(`[KorterPublisher] Browserbase session ${sessionId} closed.`);
 
     } catch (e: any) {
       console.error(`[KorterPublisher] Error:`, e);
