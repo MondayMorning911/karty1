@@ -94,10 +94,13 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
         blockAds: false,
         launchOptions: {
           args: [
+            '--disable-blink-features=AutomationControlled',
             '--use-gl=angle',
             '--use-angle=swiftshader',
             '--ignore-gpu-blocklist',
-            '--disable-blink-features=AutomationControlled'
+            '--disable-webkit-shared-image-cache',
+            '--disable-gpu',
+            '--enable-webgl'
           ]
         }
       })
@@ -410,7 +413,53 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       await delay(2000);
 
       // Проверяем ошибки
-      const errors = await page.locator('div.non-fixed-field-error').allTextContents().catch(()=>[]);
+      let errors = await page.locator('div.non-fixed-field-error').allTextContents().catch(()=>[]);
+      
+      const mapErrorStr = 'Установите метку на карте в нужном месте';
+      if (errors && errors.some(e => e.includes(mapErrorStr))) {
+          console.log('[KorterPublisher] Map pin error detected after publish, attempting to fix by re-entering street...');
+          // Retry the street input once more
+          if (parsed.street) {
+              const strInput = page.locator('input[name="street"], input.sxb0tu9').first();
+              if (await strInput.isVisible().catch(()=>false)) {
+                  await strInput.scrollIntoViewIfNeeded().catch(()=>{});
+                  await delay(500);
+                  await strInput.click({ force: true }).catch(()=>{});
+                  await delay(500);
+                  await strInput.fill('');
+                  await strInput.type(parsed.street, { delay: 100 });
+                  await delay(3000);
+                  
+                  const suggest = page.locator('div.s7gnlt');
+                  const count = await suggest.count();
+                  let clicked = false;
+                  if (count > 0) {
+                      for(let i = 0; i < count; i++) {
+                          const text = await suggest.nth(i).innerText();
+                          if (text.toLowerCase().includes(parsed.street.toLowerCase())) {
+                              await suggest.nth(i).click({ force: true }).catch(()=>{});
+                              clicked = true;
+                              break;
+                          }
+                      }
+                      if (!clicked) {
+                          await suggest.first().click({ force: true }).catch(()=>{});
+                      }
+                  } else {
+                      await page.keyboard.press('Enter').catch(()=>{});
+                  }
+                  await delay(2000);
+
+                  // Re-click publish
+                  await publishBtn.click({ force: true }).catch(()=>{});
+                  await delay(2000);
+                  // Refresh errors
+                  errors = await page.locator('div.non-fixed-field-error').allTextContents().catch(()=>[]);
+              }
+          }
+      }
+
+      // Final check for errors
       if (errors && errors.length > 0) {
           throw new Error('Ошибки заполнения обязательных полей: ' + errors.join("; "));
       }
