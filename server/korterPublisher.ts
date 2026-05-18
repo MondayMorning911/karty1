@@ -346,14 +346,41 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       if (parsed.rooms) {
           const rc = Math.min(Number(parsed.rooms), 5);
           await page.click(`#roomCount-${rc}`, { force: true }).catch(()=>{});
+          await page.evaluate((val) => {
+              const labels = Array.from(document.querySelectorAll('div, label, span'));
+              const title = labels.find(l => l.textContent && l.textContent.trim().startsWith('Комнаты'));
+              if (title && title.parentElement) {
+                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
+                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
+                  if (target) (target as HTMLElement).click();
+              }
+          }, rc).catch(()=>{});
       }
       if (parsed.bedrooms) {
           const bc = Math.min(Number(parsed.bedrooms), 4);
           await page.click(`#bedroomCount-${bc}`, { force: true }).catch(()=>{});
+          await page.evaluate((val) => {
+              const labels = Array.from(document.querySelectorAll('div, label, span'));
+              const title = labels.find(l => l.textContent && (l.textContent.trim().startsWith('Спальни') || l.textContent.trim().startsWith('Количество спален')));
+              if (title && title.parentElement) {
+                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
+                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
+                  if (target) (target as HTMLElement).click();
+              }
+          }, bc).catch(()=>{});
       }
       if (parsed.bathrooms) {
           const btc = Math.min(Number(parsed.bathrooms), 3);
           await page.click(`#bathroomCount-${btc}`, { force: true }).catch(()=>{});
+          await page.evaluate((val) => {
+              const labels = Array.from(document.querySelectorAll('div, label, span'));
+              const title = labels.find(l => l.textContent && (l.textContent.trim().startsWith('Санузлы') || l.textContent.trim().startsWith('Количество санузлов')));
+              if (title && title.parentElement) {
+                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
+                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
+                  if (target) (target as HTMLElement).click();
+              }
+          }, btc).catch(()=>{});
       }
 
       if (parsed.area) {
@@ -417,46 +444,81 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       
       const mapErrorStr = 'Установите метку на карте в нужном месте';
       if (errors && errors.some(e => e.includes(mapErrorStr))) {
-          console.log('[KorterPublisher] Map pin error detected after publish, attempting to fix by re-entering street...');
-          // Retry the street input once more
-          if (parsed.street) {
-              const strInput = page.locator('input[name="street"], input.sxb0tu9').first();
-              if (await strInput.isVisible().catch(()=>false)) {
-                  await strInput.scrollIntoViewIfNeeded().catch(()=>{});
-                  await delay(500);
-                  await strInput.click({ force: true }).catch(()=>{});
-                  await delay(500);
-                  await strInput.fill('');
-                  await strInput.type(parsed.street, { delay: 100 });
-                  await delay(3000);
-                  
-                  const suggest = page.locator('div.s7gnlt');
-                  const count = await suggest.count();
-                  let clicked = false;
-                  if (count > 0) {
-                      for(let i = 0; i < count; i++) {
-                          const text = await suggest.nth(i).innerText();
-                          if (text.toLowerCase().includes(parsed.street.toLowerCase())) {
-                              await suggest.nth(i).click({ force: true }).catch(()=>{});
-                              clicked = true;
-                              break;
-                          }
-                      }
-                      if (!clicked) {
-                          await suggest.first().click({ force: true }).catch(()=>{});
-                      }
-                  } else {
-                      await page.keyboard.press('Enter').catch(()=>{});
-                  }
-                  await delay(2000);
-
-                  // Re-click publish
-                  await publishBtn.click({ force: true }).catch(()=>{});
-                  await delay(2000);
-                  // Refresh errors
-                  errors = await page.locator('div.non-fixed-field-error').allTextContents().catch(()=>[]);
+          console.log('[KorterPublisher] Map pin error detected after publish. Executing Mapbox internal hack...');
+          
+          let targetLat = 41.6410;
+          let targetLng = 41.6310;
+          
+          try {
+              const query = `${parsed.city || 'Батуми'}, ${parsed.street || ''} ${parsed.houseNumber || ''}`;
+              console.log(`[KorterPublisher] Geocoding address: ${query}`);
+              const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`, {
+                  headers: { 'User-Agent': 'Korter/1.0 AI-Publisher' }
+              });
+              const geoData = await geoRes.json();
+              if (geoData && geoData.length > 0) {
+                  targetLat = parseFloat(geoData[0].lat);
+                  targetLng = parseFloat(geoData[0].lon);
+                  console.log(`[KorterPublisher] OSM Geocoded coordinates: ${targetLat}, ${targetLng}`);
+              } else {
+                  console.log(`[KorterPublisher] OSM Geocoder found nothing for ${query}, falling back to center.`);
               }
+          } catch(e: any) {
+              console.log('[KorterPublisher] OSM Geocoding failed:', e?.message || e);
           }
+
+          await page.evaluate(({ lat, lng }) => {
+              // Точные координаты
+              const targetLat = lat;
+              const targetLng = lng;
+
+              try {
+                  const mapContainer = document.querySelector('.mapboxgl-map') || document.querySelector('#map') || document.querySelector('.s1r0159n');
+                  
+                  // Ищем в памяти инстанс карты
+                  let mapInstance = (window as any).map || (window as any)._map || (mapContainer && (mapContainer as any).__vue__ && (mapContainer as any).__vue__.map);
+
+                  if (!mapInstance && (window as any).mapboxgl && (window as any).mapboxgl.exportedMaps) {
+                      mapInstance = (window as any).mapboxgl.exportedMaps[0];
+                  }
+
+                  // Управляем картой
+                  if (mapInstance && typeof mapInstance.setCenter === 'function') {
+                      mapInstance.setCenter([targetLng, targetLat]);
+                      mapInstance.fire('click', { lngLat: { lng: targetLng, lat: targetLat } });
+                      console.log('Mapbox успешно сдвинут в нужные координаты программно!');
+                  }
+
+                  // Дополнительно пытаемся сдвинуть маркер картинку
+                  const pin = document.querySelector('img.realty-mapbox-pin.mapboxgl-marker, .mapboxgl-marker');
+                  if (pin) {
+                      (pin as HTMLElement).style.transform = 'translate(-50%, -50%) translate(400px, 300px)';
+                  }
+                  
+                  // Ищем скрытые стейты формы
+                  const latInput = document.querySelector('input[name="lat"], input[name="latitude"]');
+                  const lngInput = document.querySelector('input[name="lng"], input[name="longitude"]');
+                  if (latInput && lngInput) {
+                      (latInput as HTMLInputElement).value = String(targetLat);
+                      (lngInput as HTMLInputElement).value = String(targetLng);
+                      latInput.dispatchEvent(new Event('input', { bubbles: true }));
+                      lngInput.dispatchEvent(new Event('input', { bubbles: true }));
+                      latInput.dispatchEvent(new Event('change', { bubbles: true }));
+                      lngInput.dispatchEvent(new Event('change', { bubbles: true }));
+                  }
+              } catch (err) {
+                  console.error('Ошибка при попытке оживить маркер:', err);
+              }
+          }, { lat: targetLat, lng: targetLng }).catch(()=>{});
+
+          await delay(2000);
+
+          // Re-click publish
+          await publishBtn.click({ force: true }).catch(()=>{});
+          await delay(2000);
+          
+          // Refresh errors
+          errors = await page.locator('div.non-fixed-field-error').allTextContents().catch(()=>[]);
       }
 
       // Final check for errors
