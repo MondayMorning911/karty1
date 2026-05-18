@@ -198,16 +198,20 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
 
       // Очистить форму перед заполнением
       try {
-          console.log(`[Korter] Looking for "Очистить форму" button...`);
-          await page.evaluate(() => {
-              const btns = Array.from(document.querySelectorAll('button, div, span'));
-              const clearBtn = btns.find(b => b.textContent && b.textContent.trim() === 'Очистить форму');
-              if (clearBtn) {
-                  (clearBtn as HTMLElement).click();
-                  console.log(`Clicked clear button`);
+          const clearBtns = [
+              page.locator('button.t10dbpex.bjrwb8u', { hasText: 'Очистить форму' }).first(),
+              page.locator('button', { hasText: 'Очистить форму' }).first(),
+              page.locator('div.s1ipb8ld', { hasText: 'Очистить форму' }).first(),
+              page.locator('text="Очистить форму"').first()
+          ];
+          for (const btn of clearBtns) {
+              if (await btn.isVisible().catch(()=>false)) {
+                  console.log(`[Korter] Form clear button found, clicking...`);
+                  await btn.click({ force: true }).catch(()=>{});
+                  await delay(1000);
+                  break;
               }
-          });
-          await delay(1000);
+          }
       } catch (e) {
          console.log(`[Korter] Failed to clear form: ${e}`);
       }
@@ -316,9 +320,18 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           if (await mskInput.isVisible().catch(()=>false)) {
               await mskInput.fill('');
               await mskInput.type(parsed.city, { delay: 100 });
-              await delay(1000);
-              const suggest = page.locator('div.s7gnlt', { hasText: parsed.city }).first();
-              await suggest.click({ force: true }).catch(()=>{});
+              await delay(1500);
+              let suggest = page.locator('div.s7gnlt', { hasText: parsed.city }).first();
+              if (await suggest.isVisible().catch(()=>false)) {
+                  await suggest.click({ force: true }).catch(()=>{});
+              } else {
+                  suggest = page.locator('div.s7gnlt').first();
+                  if (await suggest.isVisible().catch(()=>false)) {
+                      await suggest.click({ force: true }).catch(()=>{});
+                  } else {
+                      await page.keyboard.press('Enter').catch(()=>{});
+                  }
+              }
               await delay(500);
           }
       }
@@ -345,15 +358,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                       await suggest.first().click({ force: true }).catch(()=>{});
                   }
               } else {
-                  // Fallback to more generic suggestion selectors
-                  await page.waitForSelector('.suggestions-dropdown, .address-drop, [class*="suggestion"]', { timeout: 3000 }).catch(() => null);
-                  const firstSuggestion = await page.locator('.suggestions-item, [class*="suggestion"]').first();
-                  if (await firstSuggestion.isVisible().catch(()=>false)) {
-                      await firstSuggestion.click({ force: true }).catch(()=>{});
-                      console.log('[KorterPublisher] Clicked first generic address suggestion');
-                  } else {
-                      await page.keyboard.press('Enter').catch(()=>{});
-                  }
+                  await page.keyboard.press('Enter').catch(()=>{});
               }
               await delay(2000);
 
@@ -474,42 +479,22 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       
       if (parsed.rooms) {
           const rc = Math.min(Number(parsed.rooms), 5);
-          await page.click(`#roomCount-${rc}`, { force: true }).catch(()=>{});
-          await page.evaluate((val) => {
-              const labels = Array.from(document.querySelectorAll('div, label, span'));
-              const title = labels.find(l => l.textContent && l.textContent.trim().startsWith('Комнаты'));
-              if (title && title.parentElement) {
-                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
-                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
-                  if (target) (target as HTMLElement).click();
-              }
-          }, rc).catch(()=>{});
+          await page.locator(`label[for="roomCount-${rc}"]`).click({ force: true }).catch(async () => {
+              // fallback if label isn't there
+              await page.locator(`#roomCount-${rc}`).click({ force: true }).catch(()=>{});
+          });
       }
       if (parsed.bedrooms) {
           const bc = Math.min(Number(parsed.bedrooms), 4);
-          await page.click(`#bedroomCount-${bc}`, { force: true }).catch(()=>{});
-          await page.evaluate((val) => {
-              const labels = Array.from(document.querySelectorAll('div, label, span'));
-              const title = labels.find(l => l.textContent && (l.textContent.trim().startsWith('Спальни') || l.textContent.trim().startsWith('Количество спален')));
-              if (title && title.parentElement) {
-                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
-                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
-                  if (target) (target as HTMLElement).click();
-              }
-          }, bc).catch(()=>{});
+          await page.locator(`label[for="bedroomCount-${bc}"]`).click({ force: true }).catch(async () => {
+              await page.locator(`#bedroomCount-${bc}`).click({ force: true }).catch(()=>{});
+          });
       }
       if (parsed.bathrooms) {
           const btc = Math.min(Number(parsed.bathrooms), 3);
-          await page.click(`#bathroomCount-${btc}`, { force: true }).catch(()=>{});
-          await page.evaluate((val) => {
-              const labels = Array.from(document.querySelectorAll('div, label, span'));
-              const title = labels.find(l => l.textContent && (l.textContent.trim().startsWith('Санузлы') || l.textContent.trim().startsWith('Количество санузлов')));
-              if (title && title.parentElement) {
-                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
-                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
-                  if (target) (target as HTMLElement).click();
-              }
-          }, btc).catch(()=>{});
+          await page.locator(`label[for="bathroomCount-${btc}"]`).click({ force: true }).catch(async () => {
+              await page.locator(`#bathroomCount-${btc}`).click({ force: true }).catch(()=>{});
+          });
       }
 
       if (parsed.area) {
@@ -574,6 +559,57 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       const mapErrorStr = 'Установите метку на карте в нужном месте';
       if (errors && errors.some(e => e.includes(mapErrorStr))) {
           console.log('[KorterPublisher] Map pin error is STILL detected after publish. Patch did not work.');
+      }
+
+      if (errors && errors.length > 0) {
+          let retried = false;
+          // Retry city
+          if (errors.some(e => e.includes('Выберите город из списка'))) {
+              console.log('[KorterPublisher] Retrying city selection based on error...');
+              if (parsed.city) {
+                  const mskInput = page.locator('input[name="custom.geoObjectSearch"]').first();
+                  if (await mskInput.isVisible().catch(()=>false)) {
+                      await mskInput.fill('');
+                      await mskInput.type(parsed.city, { delay: 100 });
+                      await delay(1500);
+                      await page.keyboard.press('Enter').catch(()=>{});
+                      await delay(500);
+                  }
+              }
+              retried = true;
+          }
+          // Retry street and house
+          if (errors.some(e => e.includes('Выберите улицу из списка') || e.includes('Мы не нашли такой дом'))) {
+              console.log('[KorterPublisher] Retrying street/house selection based on error...');
+              if (parsed.street) {
+                  const strInput = page.locator('input[name="street"]').first();
+                  if (await strInput.isVisible().catch(()=>false)) {
+                      await strInput.fill('');
+                      await strInput.type(parsed.street, { delay: 100 });
+                      await delay(1500);
+                      await page.keyboard.press('Enter').catch(()=>{});
+                      await delay(500);
+                  }
+              }
+              if (parsed.houseNumber) {
+                  const numInput = page.locator('input[name="houseNumber"]').first();
+                  if (await numInput.isVisible().catch(()=>false)) {
+                      await numInput.fill('');
+                      await numInput.type(String(parsed.houseNumber), { delay: 100 });
+                      await delay(1000);
+                      await page.keyboard.press('Enter').catch(()=>{});
+                      await delay(500);
+                  }
+              }
+              retried = true;
+          }
+
+          if (retried) {
+              console.log('[KorterPublisher] Try publishing again after retries...');
+              await publishBtn.click({ force: true }).catch(()=>{});
+              await delay(3000);
+              errors = await page.locator('div.non-fixed-field-error').allTextContents().catch(()=>[]);
+          }
       }
 
       // Final check for errors
