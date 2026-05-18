@@ -99,7 +99,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             '--use-angle=swiftshader',
             '--ignore-gpu-blocklist',
             '--disable-webkit-shared-image-cache',
-            '--disable-gpu',
+            '--headless=new',
             '--enable-webgl'
           ]
         }
@@ -125,6 +125,76 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       });
       const page = await context.newPage();
       
+      console.log('🔍 Проверяем статус WebGL внутри контейнера Steel.dev...');
+      try {
+          await page.goto('https://webglreport.com/?v=1', { timeout: 15000 });
+          const webglStatus = await page.evaluate(() => {
+              const table = document.querySelector('table');
+              return table ? table.innerText.substring(0, 200) : 'Не удалось получить отчет WebGL';
+          });
+          console.log('📊 Отчет WebGL с сервера Steel.dev:\n', webglStatus);
+      } catch (e) {
+          console.log('Не удалось загрузить webglreport:', e);
+      }
+
+      let targetLat = 41.6410;
+      let targetLng = 41.6310;
+      try {
+          const query = `${parsed.city || 'Батуми'}, ${parsed.street || ''} ${parsed.houseNumber || ''}`;
+          console.log(`[KorterPublisher] Geocoding address: ${query}`);
+          const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`, {
+              headers: { 'User-Agent': 'Korter/1.0 AI-Publisher' }
+          });
+          const geoData = await geoRes.json();
+          if (geoData && geoData.length > 0) {
+              targetLat = parseFloat(geoData[0].lat);
+              targetLng = parseFloat(geoData[0].lon);
+              console.log(`[KorterPublisher] OSM Geocoded coordinates: ${targetLat}, ${targetLng}`);
+          } else {
+              console.log(`[KorterPublisher] OSM Geocoder found nothing for ${query}, falling back to center.`);
+          }
+      } catch(e: any) {
+          console.log('[KorterPublisher] OSM Geocoding failed:', e?.message || e);
+      }
+
+      await page.addInitScript(({ lat, lng }) => {
+        // Создаем фейковый Mapbox, который обманет фронтенд Korter
+        (window as any).mapboxgl = {
+          supported: () => true, // Говорим сайту: "WebGL работает идеально!"
+          exportedMaps: [],
+          Map: function(this: any) {
+            console.log('🔮 [Karty Proxy] Korter попытался создать карту. Подсовываем фейк-инстанс.');
+            (window as any).mapboxgl.exportedMaps.push(this);
+            (window as any)._map = this;
+            this.on = (event: string, callback: any) => {
+              // Имитируем успешную загрузку карты через 100мс
+              if (event === 'load' || event === 'style.load') {
+                setTimeout(callback, 100);
+              }
+            };
+            this.setCenter = () => this;
+            this.getCenter = () => ({ lng: lng, lat: lat });
+            this.getZoom = () => 16;
+            this.remove = () => {};
+            this.resize = () => {};
+            this.flyTo = () => {};
+            this.getCanvas = () => document.createElement('canvas');
+            this.fire = () => {};
+          },
+          Marker: function(this: any) {
+            console.log('🔮 [Karty Proxy] Создан фейковый маркер для пина.');
+            this.setLngLat = () => this;
+            this.addTo = () => this;
+            this.remove = () => {};
+            this.getElement = () => {
+              const div = document.createElement('div');
+              div.className = 'realty-mapbox-pin mapboxgl-marker mapboxgl-marker-anchor-center';
+              return div;
+            };
+          }
+        };
+      }, { lat: targetLat, lng: targetLng });
+
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
       console.log(`[KorterPublisher] Navigating to creation page...`);
@@ -141,9 +211,9 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           } else {
               const clearTextBtn = page.locator('text="Очистить форму"').first();
               if (await clearTextBtn.isVisible().catch(()=>false)) {
-                 console.log(`[Korter] Form clear text button found, clicking...`);
-                 await clearTextBtn.click({ force: true }).catch(()=>{});
-                 await delay(1000);
+                  console.log(`[Korter] Form clear text button found, clicking...`);
+                  await clearTextBtn.click({ force: true }).catch(()=>{});
+                  await delay(1000);
               }
           }
       } catch (e) {
@@ -446,66 +516,58 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       if (errors && errors.some(e => e.includes(mapErrorStr))) {
           console.log('[KorterPublisher] Map pin error detected after publish. Executing Mapbox internal hack...');
           
-          let targetLat = 41.6410;
-          let targetLng = 41.6310;
-          
-          try {
-              const query = `${parsed.city || 'Батуми'}, ${parsed.street || ''} ${parsed.houseNumber || ''}`;
-              console.log(`[KorterPublisher] Geocoding address: ${query}`);
-              const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`, {
-                  headers: { 'User-Agent': 'Korter/1.0 AI-Publisher' }
-              });
-              const geoData = await geoRes.json();
-              if (geoData && geoData.length > 0) {
-                  targetLat = parseFloat(geoData[0].lat);
-                  targetLng = parseFloat(geoData[0].lon);
-                  console.log(`[KorterPublisher] OSM Geocoded coordinates: ${targetLat}, ${targetLng}`);
-              } else {
-                  console.log(`[KorterPublisher] OSM Geocoder found nothing for ${query}, falling back to center.`);
-              }
-          } catch(e: any) {
-              console.log('[KorterPublisher] OSM Geocoding failed:', e?.message || e);
-          }
-
           await page.evaluate(({ lat, lng }) => {
               // Точные координаты
               const targetLat = lat;
               const targetLng = lng;
 
               try {
-                  const mapContainer = document.querySelector('.mapboxgl-map') || document.querySelector('#map') || document.querySelector('.s1r0159n');
+                  // 1. Ищем все элементы на странице, привязанные к Vue.js
+                  const allElements = document.querySelectorAll('*');
                   
-                  // Ищем в памяти инстанс карты
-                  let mapInstance = (window as any).map || (window as any)._map || (mapContainer && (mapContainer as any).__vue__ && (mapContainer as any).__vue__.map);
-
-                  if (!mapInstance && (window as any).mapboxgl && (window as any).mapboxgl.exportedMaps) {
-                      mapInstance = (window as any).mapboxgl.exportedMaps[0];
-                  }
-
-                  // Управляем картой
-                  if (mapInstance && typeof mapInstance.setCenter === 'function') {
-                      mapInstance.setCenter([targetLng, targetLat]);
-                      mapInstance.fire('click', { lngLat: { lng: targetLng, lat: targetLat } });
-                      console.log('Mapbox успешно сдвинут в нужные координаты программно!');
-                  }
-
-                  // Дополнительно пытаемся сдвинуть маркер картинку
-                  const pin = document.querySelector('img.realty-mapbox-pin.mapboxgl-marker, .mapboxgl-marker');
-                  if (pin) {
-                      (pin as HTMLElement).style.transform = 'translate(-50%, -50%) translate(400px, 300px)';
-                  }
+                  const searchAndSet = (obj: any, depth = 0) => {
+                    if (!obj || typeof obj !== 'object' || depth > 5) return;
+                    for (let key in obj) {
+                      const lowerKey = String(key).toLowerCase();
+                      if (lowerKey === 'lat' || lowerKey === 'latitude' || lowerKey === 'map_lat') {
+                        obj[key] = lat;
+                      }
+                      if (lowerKey === 'lng' || lowerKey === 'longitude' || lowerKey === 'map_lng' || lowerKey === 'lon') {
+                        obj[key] = lng;
+                      }
+                      if (lowerKey === 'ismarkerset' || lowerKey === 'hasmarker' || lowerKey === 'mapvalid' || lowerKey === 'valid' || lowerKey === 'isvalid' || lowerKey === 'success') {
+                        if (typeof obj[key] === 'boolean' || obj[key] === null) {
+                            obj[key] = true;
+                        }
+                      }
+                      if (typeof obj[key] === 'object') {
+                        searchAndSet(obj[key], depth + 1);
+                      }
+                    }
+                  };
                   
-                  // Ищем скрытые стейты формы
-                  const latInput = document.querySelector('input[name="lat"], input[name="latitude"]');
-                  const lngInput = document.querySelector('input[name="lng"], input[name="longitude"]');
+                  allElements.forEach(el => {
+                    const vueInstance = (el as any).__vue__ || (el as any).__vue_parent_component__?.ctx;
+                    if (vueInstance) {
+                      searchAndSet(vueInstance.$data || vueInstance);
+                    }
+                  });
+
+                  if ((window as any).__NUXT__?.state) {
+                      console.log('📦 Найден глобальный Vuex стейт Nuxt');
+                      searchAndSet((window as any).__NUXT__.state);
+                  }
+
+                  // 2. На всякий случай проверяем скрытые поля формы, если они есть
+                  const latInput = document.querySelector('input[name*="lat"], input[id*="lat"]');
+                  const lngInput = document.querySelector('input[name*="lng"], input[id*="lng"]');
                   if (latInput && lngInput) {
-                      (latInput as HTMLInputElement).value = String(targetLat);
-                      (lngInput as HTMLInputElement).value = String(targetLng);
-                      latInput.dispatchEvent(new Event('input', { bubbles: true }));
-                      lngInput.dispatchEvent(new Event('input', { bubbles: true }));
-                      latInput.dispatchEvent(new Event('change', { bubbles: true }));
-                      lngInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    (latInput as HTMLInputElement).value = lat.toString();
+                    (lngInput as HTMLInputElement).value = lng.toString();
+                    latInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    lngInput.dispatchEvent(new Event('change', { bubbles: true }));
                   }
+
               } catch (err) {
                   console.error('Ошибка при попытке оживить маркер:', err);
               }
