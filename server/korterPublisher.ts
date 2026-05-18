@@ -203,17 +203,18 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
 
       // Очистить форму перед заполнением
       try {
-          const clearBtn = page.locator('div.s1ipb8ld', { hasText: 'Очистить форму' }).first();
-          if (await clearBtn.isVisible().catch(()=>false)) {
-              console.log(`[Korter] Form clear button found, clicking...`);
-              await clearBtn.click({ force: true }).catch(()=>{});
-              await delay(1000);
-          } else {
-              const clearTextBtn = page.locator('text="Очистить форму"').first();
-              if (await clearTextBtn.isVisible().catch(()=>false)) {
-                  console.log(`[Korter] Form clear text button found, clicking...`);
-                  await clearTextBtn.click({ force: true }).catch(()=>{});
+          const clearBtns = [
+              page.locator('button.t10dbpex.bjrwb8u', { hasText: 'Очистить форму' }).first(),
+              page.locator('button', { hasText: 'Очистить форму' }).first(),
+              page.locator('div.s1ipb8ld', { hasText: 'Очистить форму' }).first(),
+              page.locator('text="Очистить форму"').first()
+          ];
+          for (const btn of clearBtns) {
+              if (await btn.isVisible().catch(()=>false)) {
+                  console.log(`[Korter] Form clear button found, clicking...`);
+                  await btn.click({ force: true }).catch(()=>{});
                   await delay(1000);
+                  break;
               }
           }
       } catch (e) {
@@ -353,9 +354,72 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                       await suggest.first().click({ force: true }).catch(()=>{});
                   }
               } else {
-                  await page.keyboard.press('Enter').catch(()=>{});
+                  // Fallback to more generic suggestion selectors
+                  await page.waitForSelector('.suggestions-dropdown, .address-drop, [class*="suggestion"]', { timeout: 3000 }).catch(() => null);
+                  const firstSuggestion = await page.locator('.suggestions-item, [class*="suggestion"]').first();
+                  if (await firstSuggestion.isVisible().catch(()=>false)) {
+                      await firstSuggestion.click({ force: true }).catch(()=>{});
+                      console.log('[KorterPublisher] Clicked first generic address suggestion');
+                  } else {
+                      await page.keyboard.press('Enter').catch(()=>{});
+                  }
               }
-              await delay(1000);
+              await delay(2000);
+
+              console.log('🎯 Внедряем координаты OSM в живой реактивный стейт Nuxt/Vue...');
+              await page.evaluate(({ lat, lng }) => {
+                // 1. Взламываем глобальный Vuex Store
+                if ((window as any).$nuxt && (window as any).$nuxt.$store && (window as any).$nuxt.$store.state) {
+                  console.log('🟢 [Karty] Найден активный Vuex Store. Начинаем мутацию стейта...');
+                  
+                  const mutateReactiveObject = (obj: any) => {
+                    for (let key in obj) {
+                      if (obj[key] !== null && typeof obj[key] === 'object') {
+                        mutateReactiveObject(obj[key]);
+                      } else {
+                        const lowerKey = String(key).toLowerCase();
+                        if (lowerKey === 'lat' || lowerKey === 'latitude' || lowerKey === 'map_lat') {
+                          obj[key] = lat;
+                        }
+                        if (lowerKey === 'lng' || lowerKey === 'longitude' || lowerKey === 'map_lng' || lowerKey === 'lon') {
+                          obj[key] = lng;
+                        }
+                        if (lowerKey === 'ismarkerset' || lowerKey === 'hasmarker' || lowerKey === 'mapvalid' || lowerKey === 'isvalid' || lowerKey === 'valid') {
+                          obj[key] = true;
+                        }
+                      }
+                    }
+                  };
+                  
+                  mutateReactiveObject((window as any).$nuxt.$store.state);
+                }
+
+                // 2. Взламываем дерево активных Vue-компонентов в DOM
+                const rootElement = document.querySelector('#__nuxt') || document.body;
+                if (rootElement && (rootElement as any).__vue__) {
+                  console.log('🟢 [Karty] Найдено живое дерево компонентов Vue. Прошиваем реквизиты...');
+                  
+                  const walkVueTree = (vm: any) => {
+                    if (vm.$data) {
+                      for (let key in vm.$data) {
+                        const lowerKey = String(key).toLowerCase();
+                        if (lowerKey.includes('lat') || lowerKey.includes('lng') || lowerKey.includes('coords') || lowerKey.includes('map') || lowerKey.includes('valid') || lowerKey.includes('marker')) {
+                          if (lowerKey.includes('lat')) vm[key] = lat;
+                          if (lowerKey.includes('lng')) vm[key] = lng;
+                          if (lowerKey.includes('marker') || lowerKey.includes('valid') || lowerKey.includes('success')) vm[key] = true;
+                        }
+                      }
+                    }
+                    if (vm.$children && vm.$children.length) {
+                      vm.$children.forEach(walkVueTree);
+                    }
+                  };
+                  
+                  walkVueTree((rootElement as any).__vue__);
+                }
+                
+                console.log('🚀 Живой стейт успешно прошит поддельной картой!');
+              }, { lat: targetLat, lng: targetLng }).catch(()=>{});
           }
       }
       if (parsed.houseNumber) {
@@ -413,44 +477,38 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           await page.fill('#floorCount', String(parsed.floorCount)).catch(()=>{});
       }
       
+      const clickRadio = async (id: string, val: number) => {
+          await page.click(`#${id}-${val}`, { force: true }).catch(()=>{});
+          await page.evaluate((radioId) => {
+              const r = document.getElementById(radioId) as HTMLInputElement;
+              if (r) {
+                  r.click();
+                  r.checked = true;
+                  r.dispatchEvent(new Event('change', { bubbles: true }));
+                  r.dispatchEvent(new Event('input', { bubbles: true }));
+                  const lbl = document.querySelector(`label[for="${radioId}"]`) as HTMLLabelElement;
+                  if (lbl) lbl.click();
+                  if (r.parentElement && r.parentElement.tagName.toLowerCase() === 'label') {
+                      r.parentElement.click();
+                  }
+                  if (r.nextElementSibling && (r.nextElementSibling.tagName.toLowerCase() === 'span' || r.nextElementSibling.tagName.toLowerCase() === 'div')) {
+                      (r.nextElementSibling as HTMLElement).click();
+                  }
+              }
+          }, `${id}-${val}`).catch(()=>{});
+      };
+
       if (parsed.rooms) {
           const rc = Math.min(Number(parsed.rooms), 5);
-          await page.click(`#roomCount-${rc}`, { force: true }).catch(()=>{});
-          await page.evaluate((val) => {
-              const labels = Array.from(document.querySelectorAll('div, label, span'));
-              const title = labels.find(l => l.textContent && l.textContent.trim().startsWith('Комнаты'));
-              if (title && title.parentElement) {
-                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
-                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
-                  if (target) (target as HTMLElement).click();
-              }
-          }, rc).catch(()=>{});
+          await clickRadio('roomCount', rc);
       }
       if (parsed.bedrooms) {
           const bc = Math.min(Number(parsed.bedrooms), 4);
-          await page.click(`#bedroomCount-${bc}`, { force: true }).catch(()=>{});
-          await page.evaluate((val) => {
-              const labels = Array.from(document.querySelectorAll('div, label, span'));
-              const title = labels.find(l => l.textContent && (l.textContent.trim().startsWith('Спальни') || l.textContent.trim().startsWith('Количество спален')));
-              if (title && title.parentElement) {
-                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
-                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
-                  if (target) (target as HTMLElement).click();
-              }
-          }, bc).catch(()=>{});
+          await clickRadio('bedroomCount', bc);
       }
       if (parsed.bathrooms) {
           const btc = Math.min(Number(parsed.bathrooms), 3);
-          await page.click(`#bathroomCount-${btc}`, { force: true }).catch(()=>{});
-          await page.evaluate((val) => {
-              const labels = Array.from(document.querySelectorAll('div, label, span'));
-              const title = labels.find(l => l.textContent && (l.textContent.trim().startsWith('Санузлы') || l.textContent.trim().startsWith('Количество санузлов')));
-              if (title && title.parentElement) {
-                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
-                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
-                  if (target) (target as HTMLElement).click();
-              }
-          }, btc).catch(()=>{});
+          await clickRadio('bathroomCount', btc);
       }
 
       if (parsed.area) {
