@@ -43,13 +43,23 @@ export const korterAuthManager = {
       const sessionData = await sessionResponse.json();
       const sessionId = sessionData.id;
 
-      const browser = await chromium.connectOverCDP(`wss://connect.browserbase.com?apiKey=${BROWSERBASE_API_KEY}&sessionId=${sessionId}`);
+      const params = new URLSearchParams({
+        apiKey: BROWSERBASE_API_KEY,
+        sessionId: sessionId,
+        enableStealth: 'true', 
+        enableWebGL: 'true',   
+        viewport: JSON.stringify({ width: 1280, height: 1024 }) 
+      });
+      const wsUrl = `wss://connect.browserbase.com?${params.toString()}`;
+      console.log('🚀 Подключаемся к Browserbase (Stealth + WebGL + Viewport)...');
+      const browser = await chromium.connectOverCDP(wsUrl);
       
       console.log(`[KorterAuth] Connected to Browserbase browser context...`);
       const context = browser.contexts()[0];
 
       console.log(`[KorterAuth] Opening new page...`);
       const page = await context.newPage();
+      await page.setViewportSize({ width: 1280, height: 1024 });
 
       // Блокируем лишние ресурсы для ускорения загрузки
       await page.route('**/*', (route) => {

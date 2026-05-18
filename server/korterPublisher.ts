@@ -101,7 +101,16 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     const bbSessionData = await sessionResponse.json();
     const sessionId = bbSessionData.id;
 
-    const browser = await chromium.connectOverCDP(`wss://connect.browserbase.com?apiKey=${BROWSERBASE_API_KEY}&sessionId=${sessionId}`);
+    const params = new URLSearchParams({
+      apiKey: BROWSERBASE_API_KEY,
+      sessionId: sessionId,
+      enableStealth: 'true', 
+      enableWebGL: 'true',   
+      viewport: JSON.stringify({ width: 1280, height: 1024 }) 
+    });
+    const wsUrl = `wss://connect.browserbase.com?${params.toString()}`;
+    console.log('🚀 Подключаемся к Browserbase (Stealth + WebGL + Viewport)...');
+    const browser = await chromium.connectOverCDP(wsUrl);
     
     try {
       console.log(`[KorterPublisher] Opened browser, applying state...`);
@@ -113,103 +122,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
         timezoneId: 'Asia/Tbilisi'
       });
       const page = await context.newPage();
+      await page.setViewportSize({ width: 1280, height: 1024 });
       
-      console.log('🔍 Проверяем статус WebGL внутри контейнера Steel.dev...');
-      try {
-          await page.goto('https://webglreport.com/?v=1', { timeout: 15000 });
-          const webglStatus = await page.evaluate(() => {
-              const table = document.querySelector('table');
-              return table ? table.innerText.substring(0, 200) : 'Не удалось получить отчет WebGL';
-          });
-          console.log('📊 Отчет WebGL с сервера Steel.dev:\n', webglStatus);
-      } catch (e) {
-          console.log('Не удалось загрузить webglreport:', e);
-      }
-
-      let targetLat = 41.6410;
-      let targetLng = 41.6310;
-      try {
-          const query = `${parsed.city || 'Батуми'}, ${parsed.street || ''} ${parsed.houseNumber || ''}`;
-          console.log(`[KorterPublisher] Geocoding address: ${query}`);
-          const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`, {
-              headers: { 'User-Agent': 'Korter/1.0 AI-Publisher' }
-          });
-          const geoData = await geoRes.json();
-          if (geoData && geoData.length > 0) {
-              targetLat = parseFloat(geoData[0].lat);
-              targetLng = parseFloat(geoData[0].lon);
-              console.log(`[KorterPublisher] OSM Geocoded coordinates: ${targetLat}, ${targetLng}`);
-          } else {
-              console.log(`[KorterPublisher] OSM Geocoder found nothing for ${query}, falling back to center.`);
-          }
-      } catch(e: any) {
-          console.log('[KorterPublisher] OSM Geocoding failed:', e?.message || e);
-      }
-
-      console.log('🛡️ [Karty Network] Устанавливаем перехватчик для бандла Mapbox...');
-      await page.route('**/*mapbox-gl*.js', async route => {
-        console.log('💉 [Karty Network] Пойман бандл Mapbox! Делаем инжект WebGL-поддержки...');
-        try {
-          const response = await route.fetch();
-          let body = await response.text();
-
-          // Патчим функцию supported() - заставляем её всегда возвращать true
-          body = body.replace(/supported\s*\(\s*\)\s*\{[^}]*\}/g, 'supported(){return true;}');
-          
-          // Патчим минифицированные проверки внутри классов Mapbox
-          body = body.replace(/this\.supported\s*=\s*!1/g, 'this.supported=!0');
-          body = body.replace(/this\.supported\s*=\s*false/g, 'this.supported=true');
-
-          // Отдаем Кортеру наш модифицированный (взломанный) скрипт
-          await route.fulfill({ response, body, contentType: 'application/javascript' });
-          console.log('✅ Бандл успешно пропатчен и отдан браузеру!');
-        } catch (err: any) {
-          console.error('⚠️ Ошибка при патче бандла:', err?.message);
-          await route.continue();
-        }
-      });
-      
-      // Включаем перехват запросов к бэкенду Кортера
-      await page.route('**/pyapi/realty/form/**', async (route) => {
-        const method = route.request().method();
-        
-        // Ловим только запросы на сохранение/публикацию (POST или PUT)
-        if (method === 'POST' || method === 'PUT') {
-          const request = route.request();
-          let payload: any;
-          
-          try {
-            payload = JSON.parse(request.postData() || '{}');
-          } catch (e) {
-            payload = {};
-          }
-
-          // Проверяем, что это отправка данных объявления (например, есть цена или описание)
-          if (payload && ('price' in payload || 'rooms' in payload || 'description' in payload || 'sellerEntityType' in payload)) {
-            console.log('💉 [Karty MitM] Финальный запрос публикации пойман! Вшиваем эталонные гео-данные...');
-
-            // Жестко перезаписываем координаты и OSM ID прямо в JSON перед отправкой на бэкенд
-            payload.lat = String(targetLat);
-            payload.lng = String(targetLng);
-            payload.street = parsed.street || payload.street;
-            // payload.houseNumber = payload.houseNumber; // Keep whatever is there or set if parsed
-            
-            // На всякий случай заполняем OSM/Place ID, если бэкенд проверяет их наличие
-            // These might not be strictly necessary if Korter just accepts lat/lng, but good as fallback
-            payload.placeId = "22144003"; 
-            payload.osmId = "W123452003";
-            payload.isCustomAddress = false; // Говорим серверу, что адрес валидный и найден в их базе
-
-            // Отправляем модифицированный пакет дальше на сервер
-            await route.continue({
-              postData: JSON.stringify(payload)
-            });
-            return;
-          }
-        }
-        await route.continue();
-      });
-
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
       console.log(`[KorterPublisher] Navigating to creation page...`);
@@ -391,65 +305,6 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   await page.keyboard.press('Enter').catch(()=>{});
               }
               await delay(2000);
-
-              console.log('🎯 Ищем живой инстанс пропатченной карты и Composition API...');
-              await page.evaluate(({ lat, lng }) => {
-                let success = false;
-              
-                // --- ВЕКТОР 3 от Клода: Стреляем событием прямо в живую карту ---
-                const mapContainer = document.querySelector('.mapboxgl-map') || document.querySelector('[class*="map"]');
-                if (mapContainer && (mapContainer as any)._mapboxgl_map) {
-                  console.log('🗺️ [Karty] Найден объект Mapbox! Симулируем клик пользователя...');
-                  const map = (mapContainer as any)._mapboxgl_map;
-                  
-                  // Перемещаем невидимую карту в нужную точку
-                  if (typeof map.setCenter === 'function') map.setCenter([lng, lat]);
-                  
-                  // Выстреливаем событие клика (именно это слушает Vue-валидатор)
-                  if (typeof map.fire === 'function') {
-                    map.fire('click', {
-                      lngLat: { lng: lng, lat: lat },
-                      point: { x: 250, y: 250 } // Фейковые координаты мышки на экране
-                    });
-                    success = true;
-                  }
-                }
-              
-                // --- ВЕКТОР 4 от Клода: Страховочный выстрел по Vue 3 (Nuxt 3) ---
-                if (!success) {
-                  console.log('🧠 [Karty] Переходим к глубокому взлому стейта Vue 3 (Composition API)...');
-                  
-                  // Ищем форму или основной контейнер
-                  const formEl = document.querySelector('form') || document.querySelector('[class*="publish"]') || document.querySelector('.page-container');
-                  
-                  // В Nuxt 3 стейт лежит в __vueParentComponent
-                  let instance = (formEl as any)?.__vueParentComponent || (formEl as any)?.__vue_app__;
-                  
-                  while (instance) {
-                    // Ищем Composition API (setupState)
-                    const data = instance.setupState || instance.data;
-                    
-                    if (data && (typeof data === 'object')) {
-                      let patched = false;
-                      
-                      // Перебираем ключи, ищем упоминания карты или координат
-                      for (const key in data) {
-                        const lowerKey = key.toLowerCase();
-                        
-                        if (lowerKey === 'lat' || lowerKey.includes('latitude')) { data[key] = lat; patched = true; }
-                        if (lowerKey === 'lng' || lowerKey === 'lon' || lowerKey.includes('longitude')) { data[key] = lng; patched = true; }
-                        if (lowerKey === 'mapvalid' || lowerKey === 'ismapset' || lowerKey === 'hasmarker') { data[key] = true; patched = true; }
-                      }
-                      
-                      if (patched) {
-                        console.log(`🎯 [Karty] Успешно пропатчен setupState в компоненте Vue 3!`);
-                        break; // Выходим из цикла, стейт пробит
-                      }
-                    }
-                    instance = instance.parent; // Идем вверх по дереву
-                  }
-                }
-              }, { lat: targetLat, lng: targetLng }).catch(()=>{});
           }
       }
       if (parsed.houseNumber) {
