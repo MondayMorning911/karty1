@@ -91,8 +91,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
         'X-BB-API-Key': BROWSERBASE_API_KEY
       },
       body: JSON.stringify({
-        projectId: BROWSERBASE_PROJECT_ID,
-        proxies: true
+        projectId: BROWSERBASE_PROJECT_ID
       })
     });
     
