@@ -157,66 +157,57 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           console.log('[KorterPublisher] OSM Geocoding failed:', e?.message || e);
       }
 
-      await page.addInitScript(({ lat, lng }) => {
-        // Создаем фейковый Mapbox, который обманет фронтенд Korter
-        (window as any).mapboxgl = {
-          supported: () => true, // Говорим сайту: "WebGL работает идеально!"
-          exportedMaps: [],
-          Map: function(this: any) {
-            console.log('🔮 [Karty Proxy] Korter попытался создать карту. Подсовываем фейк-инстанс.');
-            (window as any).mapboxgl.exportedMaps.push(this);
-            (window as any)._map = this;
-            this.on = (event: string, callback: any) => {
-              // Имитируем успешную загрузку карты через 100мс
-              if (event === 'load' || event === 'style.load') {
-                setTimeout(callback, 100);
-              }
-            };
-            this.setCenter = () => this;
-            this.getCenter = () => ({ lng: lng, lat: lat });
-            this.getZoom = () => 16;
-            this.remove = () => {};
-            this.resize = () => {};
-            this.flyTo = () => {};
-            this.getCanvas = () => document.createElement('canvas');
-            this.fire = () => {};
-          },
-          Marker: function(this: any) {
-            console.log('🔮 [Karty Proxy] Создан фейковый маркер для пина.');
-            this.setLngLat = () => this;
-            this.addTo = () => this;
-            this.remove = () => {};
-            this.getElement = () => {
-              const div = document.createElement('div');
-              div.className = 'realty-mapbox-pin mapboxgl-marker mapboxgl-marker-anchor-center';
-              return div;
-            };
-          }
-        };
-      }, { lat: targetLat, lng: targetLng });
+      console.log('🛡️ [Karty Network] Устанавливаем перехватчик для бандла Mapbox...');
+      await page.route('**/*mapbox-gl*.js', async route => {
+        console.log('💉 [Karty Network] Пойман бандл Mapbox! Делаем инжект WebGL-поддержки...');
+        try {
+          const response = await route.fetch();
+          let body = await response.text();
+
+          // Патчим функцию supported() - заставляем её всегда возвращать true
+          body = body.replace(/supported\s*\(\s*\)\s*\{[^}]*\}/g, 'supported(){return true;}');
+          
+          // Патчим минифицированные проверки внутри классов Mapbox
+          body = body.replace(/this\.supported\s*=\s*!1/g, 'this.supported=!0');
+          body = body.replace(/this\.supported\s*=\s*false/g, 'this.supported=true');
+
+          // Отдаем Кортеру наш модифицированный (взломанный) скрипт
+          await route.fulfill({ response, body, contentType: 'application/javascript' });
+          console.log('✅ Бандл успешно пропатчен и отдан браузеру!');
+        } catch (err: any) {
+          console.error('⚠️ Ошибка при патче бандла:', err?.message);
+          await route.continue();
+        }
+      });
 
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
       console.log(`[KorterPublisher] Navigating to creation page...`);
-      await page.goto('https://korter.ge/ru/property/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      try {
+          await page.goto('https://korter.ge/ru/property/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      } catch (e: any) {
+          if (e.message && e.message.includes('ERR_ABORTED')) {
+              console.log('[KorterPublisher] ERR_ABORTED on goto, retrying...');
+              await delay(2000);
+              await page.goto('https://korter.ge/ru/property/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
+          } else {
+              throw e;
+          }
+      }
       await delay(2000);
 
       // Очистить форму перед заполнением
       try {
-          const clearBtns = [
-              page.locator('button.t10dbpex.bjrwb8u', { hasText: 'Очистить форму' }).first(),
-              page.locator('button', { hasText: 'Очистить форму' }).first(),
-              page.locator('div.s1ipb8ld', { hasText: 'Очистить форму' }).first(),
-              page.locator('text="Очистить форму"').first()
-          ];
-          for (const btn of clearBtns) {
-              if (await btn.isVisible().catch(()=>false)) {
-                  console.log(`[Korter] Form clear button found, clicking...`);
-                  await btn.click({ force: true }).catch(()=>{});
-                  await delay(1000);
-                  break;
+          console.log(`[Korter] Looking for "Очистить форму" button...`);
+          await page.evaluate(() => {
+              const btns = Array.from(document.querySelectorAll('button, div, span'));
+              const clearBtn = btns.find(b => b.textContent && b.textContent.trim() === 'Очистить форму');
+              if (clearBtn) {
+                  (clearBtn as HTMLElement).click();
+                  console.log(`Clicked clear button`);
               }
-          }
+          });
+          await delay(1000);
       } catch (e) {
          console.log(`[Korter] Failed to clear form: ${e}`);
       }
@@ -366,59 +357,63 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               }
               await delay(2000);
 
-              console.log('🎯 Внедряем координаты OSM в живой реактивный стейт Nuxt/Vue...');
+              console.log('🎯 Ищем живой инстанс пропатченной карты и Composition API...');
               await page.evaluate(({ lat, lng }) => {
-                // 1. Взламываем глобальный Vuex Store
-                if ((window as any).$nuxt && (window as any).$nuxt.$store && (window as any).$nuxt.$store.state) {
-                  console.log('🟢 [Karty] Найден активный Vuex Store. Начинаем мутацию стейта...');
+                let success = false;
+              
+                // --- ВЕКТОР 3 от Клода: Стреляем событием прямо в живую карту ---
+                const mapContainer = document.querySelector('.mapboxgl-map') || document.querySelector('[class*="map"]');
+                if (mapContainer && (mapContainer as any)._mapboxgl_map) {
+                  console.log('🗺️ [Karty] Найден объект Mapbox! Симулируем клик пользователя...');
+                  const map = (mapContainer as any)._mapboxgl_map;
                   
-                  const mutateReactiveObject = (obj: any) => {
-                    for (let key in obj) {
-                      if (obj[key] !== null && typeof obj[key] === 'object') {
-                        mutateReactiveObject(obj[key]);
-                      } else {
-                        const lowerKey = String(key).toLowerCase();
-                        if (lowerKey === 'lat' || lowerKey === 'latitude' || lowerKey === 'map_lat') {
-                          obj[key] = lat;
-                        }
-                        if (lowerKey === 'lng' || lowerKey === 'longitude' || lowerKey === 'map_lng' || lowerKey === 'lon') {
-                          obj[key] = lng;
-                        }
-                        if (lowerKey === 'ismarkerset' || lowerKey === 'hasmarker' || lowerKey === 'mapvalid' || lowerKey === 'isvalid' || lowerKey === 'valid') {
-                          obj[key] = true;
-                        }
+                  // Перемещаем невидимую карту в нужную точку
+                  if (typeof map.setCenter === 'function') map.setCenter([lng, lat]);
+                  
+                  // Выстреливаем событие клика (именно это слушает Vue-валидатор)
+                  if (typeof map.fire === 'function') {
+                    map.fire('click', {
+                      lngLat: { lng: lng, lat: lat },
+                      point: { x: 250, y: 250 } // Фейковые координаты мышки на экране
+                    });
+                    success = true;
+                  }
+                }
+              
+                // --- ВЕКТОР 4 от Клода: Страховочный выстрел по Vue 3 (Nuxt 3) ---
+                if (!success) {
+                  console.log('🧠 [Karty] Переходим к глубокому взлому стейта Vue 3 (Composition API)...');
+                  
+                  // Ищем форму или основной контейнер
+                  const formEl = document.querySelector('form') || document.querySelector('[class*="publish"]') || document.querySelector('.page-container');
+                  
+                  // В Nuxt 3 стейт лежит в __vueParentComponent
+                  let instance = (formEl as any)?.__vueParentComponent || (formEl as any)?.__vue_app__;
+                  
+                  while (instance) {
+                    // Ищем Composition API (setupState)
+                    const data = instance.setupState || instance.data;
+                    
+                    if (data && (typeof data === 'object')) {
+                      let patched = false;
+                      
+                      // Перебираем ключи, ищем упоминания карты или координат
+                      for (const key in data) {
+                        const lowerKey = key.toLowerCase();
+                        
+                        if (lowerKey === 'lat' || lowerKey.includes('latitude')) { data[key] = lat; patched = true; }
+                        if (lowerKey === 'lng' || lowerKey === 'lon' || lowerKey.includes('longitude')) { data[key] = lng; patched = true; }
+                        if (lowerKey === 'mapvalid' || lowerKey === 'ismapset' || lowerKey === 'hasmarker') { data[key] = true; patched = true; }
+                      }
+                      
+                      if (patched) {
+                        console.log(`🎯 [Karty] Успешно пропатчен setupState в компоненте Vue 3!`);
+                        break; // Выходим из цикла, стейт пробит
                       }
                     }
-                  };
-                  
-                  mutateReactiveObject((window as any).$nuxt.$store.state);
+                    instance = instance.parent; // Идем вверх по дереву
+                  }
                 }
-
-                // 2. Взламываем дерево активных Vue-компонентов в DOM
-                const rootElement = document.querySelector('#__nuxt') || document.body;
-                if (rootElement && (rootElement as any).__vue__) {
-                  console.log('🟢 [Karty] Найдено живое дерево компонентов Vue. Прошиваем реквизиты...');
-                  
-                  const walkVueTree = (vm: any) => {
-                    if (vm.$data) {
-                      for (let key in vm.$data) {
-                        const lowerKey = String(key).toLowerCase();
-                        if (lowerKey.includes('lat') || lowerKey.includes('lng') || lowerKey.includes('coords') || lowerKey.includes('map') || lowerKey.includes('valid') || lowerKey.includes('marker')) {
-                          if (lowerKey.includes('lat')) vm[key] = lat;
-                          if (lowerKey.includes('lng')) vm[key] = lng;
-                          if (lowerKey.includes('marker') || lowerKey.includes('valid') || lowerKey.includes('success')) vm[key] = true;
-                        }
-                      }
-                    }
-                    if (vm.$children && vm.$children.length) {
-                      vm.$children.forEach(walkVueTree);
-                    }
-                  };
-                  
-                  walkVueTree((rootElement as any).__vue__);
-                }
-                
-                console.log('🚀 Живой стейт успешно прошит поддельной картой!');
               }, { lat: targetLat, lng: targetLng }).catch(()=>{});
           }
       }
@@ -477,38 +472,44 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           await page.fill('#floorCount', String(parsed.floorCount)).catch(()=>{});
       }
       
-      const clickRadio = async (id: string, val: number) => {
-          await page.click(`#${id}-${val}`, { force: true }).catch(()=>{});
-          await page.evaluate((radioId) => {
-              const r = document.getElementById(radioId) as HTMLInputElement;
-              if (r) {
-                  r.click();
-                  r.checked = true;
-                  r.dispatchEvent(new Event('change', { bubbles: true }));
-                  r.dispatchEvent(new Event('input', { bubbles: true }));
-                  const lbl = document.querySelector(`label[for="${radioId}"]`) as HTMLLabelElement;
-                  if (lbl) lbl.click();
-                  if (r.parentElement && r.parentElement.tagName.toLowerCase() === 'label') {
-                      r.parentElement.click();
-                  }
-                  if (r.nextElementSibling && (r.nextElementSibling.tagName.toLowerCase() === 'span' || r.nextElementSibling.tagName.toLowerCase() === 'div')) {
-                      (r.nextElementSibling as HTMLElement).click();
-                  }
-              }
-          }, `${id}-${val}`).catch(()=>{});
-      };
-
       if (parsed.rooms) {
           const rc = Math.min(Number(parsed.rooms), 5);
-          await clickRadio('roomCount', rc);
+          await page.click(`#roomCount-${rc}`, { force: true }).catch(()=>{});
+          await page.evaluate((val) => {
+              const labels = Array.from(document.querySelectorAll('div, label, span'));
+              const title = labels.find(l => l.textContent && l.textContent.trim().startsWith('Комнаты'));
+              if (title && title.parentElement) {
+                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
+                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
+                  if (target) (target as HTMLElement).click();
+              }
+          }, rc).catch(()=>{});
       }
       if (parsed.bedrooms) {
           const bc = Math.min(Number(parsed.bedrooms), 4);
-          await clickRadio('bedroomCount', bc);
+          await page.click(`#bedroomCount-${bc}`, { force: true }).catch(()=>{});
+          await page.evaluate((val) => {
+              const labels = Array.from(document.querySelectorAll('div, label, span'));
+              const title = labels.find(l => l.textContent && (l.textContent.trim().startsWith('Спальни') || l.textContent.trim().startsWith('Количество спален')));
+              if (title && title.parentElement) {
+                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
+                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
+                  if (target) (target as HTMLElement).click();
+              }
+          }, bc).catch(()=>{});
       }
       if (parsed.bathrooms) {
           const btc = Math.min(Number(parsed.bathrooms), 3);
-          await clickRadio('bathroomCount', btc);
+          await page.click(`#bathroomCount-${btc}`, { force: true }).catch(()=>{});
+          await page.evaluate((val) => {
+              const labels = Array.from(document.querySelectorAll('div, label, span'));
+              const title = labels.find(l => l.textContent && (l.textContent.trim().startsWith('Санузлы') || l.textContent.trim().startsWith('Количество санузлов')));
+              if (title && title.parentElement) {
+                  const opts = Array.from(title.parentElement.querySelectorAll('div, span'));
+                  const target = opts.find(o => o.textContent && o.textContent.trim() === String(val) && o.children.length === 0);
+                  if (target) (target as HTMLElement).click();
+              }
+          }, btc).catch(()=>{});
       }
 
       if (parsed.area) {
@@ -572,73 +573,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       
       const mapErrorStr = 'Установите метку на карте в нужном месте';
       if (errors && errors.some(e => e.includes(mapErrorStr))) {
-          console.log('[KorterPublisher] Map pin error detected after publish. Executing Mapbox internal hack...');
-          
-          await page.evaluate(({ lat, lng }) => {
-              // Точные координаты
-              const targetLat = lat;
-              const targetLng = lng;
-
-              try {
-                  // 1. Ищем все элементы на странице, привязанные к Vue.js
-                  const allElements = document.querySelectorAll('*');
-                  
-                  const searchAndSet = (obj: any, depth = 0) => {
-                    if (!obj || typeof obj !== 'object' || depth > 5) return;
-                    for (let key in obj) {
-                      const lowerKey = String(key).toLowerCase();
-                      if (lowerKey === 'lat' || lowerKey === 'latitude' || lowerKey === 'map_lat') {
-                        obj[key] = lat;
-                      }
-                      if (lowerKey === 'lng' || lowerKey === 'longitude' || lowerKey === 'map_lng' || lowerKey === 'lon') {
-                        obj[key] = lng;
-                      }
-                      if (lowerKey === 'ismarkerset' || lowerKey === 'hasmarker' || lowerKey === 'mapvalid' || lowerKey === 'valid' || lowerKey === 'isvalid' || lowerKey === 'success') {
-                        if (typeof obj[key] === 'boolean' || obj[key] === null) {
-                            obj[key] = true;
-                        }
-                      }
-                      if (typeof obj[key] === 'object') {
-                        searchAndSet(obj[key], depth + 1);
-                      }
-                    }
-                  };
-                  
-                  allElements.forEach(el => {
-                    const vueInstance = (el as any).__vue__ || (el as any).__vue_parent_component__?.ctx;
-                    if (vueInstance) {
-                      searchAndSet(vueInstance.$data || vueInstance);
-                    }
-                  });
-
-                  if ((window as any).__NUXT__?.state) {
-                      console.log('📦 Найден глобальный Vuex стейт Nuxt');
-                      searchAndSet((window as any).__NUXT__.state);
-                  }
-
-                  // 2. На всякий случай проверяем скрытые поля формы, если они есть
-                  const latInput = document.querySelector('input[name*="lat"], input[id*="lat"]');
-                  const lngInput = document.querySelector('input[name*="lng"], input[id*="lng"]');
-                  if (latInput && lngInput) {
-                    (latInput as HTMLInputElement).value = lat.toString();
-                    (lngInput as HTMLInputElement).value = lng.toString();
-                    latInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    lngInput.dispatchEvent(new Event('change', { bubbles: true }));
-                  }
-
-              } catch (err) {
-                  console.error('Ошибка при попытке оживить маркер:', err);
-              }
-          }, { lat: targetLat, lng: targetLng }).catch(()=>{});
-
-          await delay(2000);
-
-          // Re-click publish
-          await publishBtn.click({ force: true }).catch(()=>{});
-          await delay(2000);
-          
-          // Refresh errors
-          errors = await page.locator('div.non-fixed-field-error').allTextContents().catch(()=>[]);
+          console.log('[KorterPublisher] Map pin error is STILL detected after publish. Patch did not work.');
       }
 
       // Final check for errors
