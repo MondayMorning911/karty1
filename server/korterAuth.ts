@@ -55,18 +55,16 @@ export const korterAuthManager = {
       const browser = await chromium.connectOverCDP(wsUrl);
       
       console.log(`[KorterAuth] Connected to Browserbase browser context...`);
-      const context = browser.contexts()[0];
+      const context = browser.contexts()[0] || await browser.newContext();
 
       console.log(`[KorterAuth] Opening new page...`);
       const page = await context.newPage();
       await page.setViewportSize({ width: 1280, height: 1024 });
 
-      // Блокируем лишние ресурсы для ускорения загрузки
+      // Блокируем скрипты аналитики
       await page.route('**/*', (route) => {
         const url = route.request().url();
-        const type = route.request().resourceType();
-        if (['image', 'font', 'media', 'other'].includes(type) || 
-            url.includes('google-analytics') || url.includes('facebook') || url.includes('hotjar.com') || url.includes('googletagmanager.com')) {
+        if (url.includes('google-analytics') || url.includes('facebook') || url.includes('hotjar.com') || url.includes('googletagmanager.com')) {
           route.abort().catch(() => {});
         } else {
           route.continue().catch(() => {});
@@ -81,7 +79,8 @@ export const korterAuthManager = {
       };
 
       console.log(`[KorterAuth] Navigating to https://korter.ge/ru`);
-      await page.goto('https://korter.ge/ru', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
+      await page.goto('https://korter.ge/ru', { timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
+      await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => console.log('Auth domcontentloaded timed out'));
       
       // ЗАКРЫВАЕМ ОКНО ПРАВИЛ ЕСЛИ ЕСТЬ, И ПАПНЕЛИ ПЕРЕВОДА
       await delay(3000); // Give it a moment to render

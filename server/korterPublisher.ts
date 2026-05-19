@@ -128,16 +128,19 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
 
       console.log(`[KorterPublisher] Navigating to creation page...`);
       try {
-          await page.goto('https://korter.ge/ru/property/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await page.goto('https://korter.ge/ru/property/create', { timeout: 30000 });
+          await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => console.log('Load state domcontentloaded timed out'));
       } catch (e: any) {
           if (e.message && e.message.includes('ERR_ABORTED')) {
               console.log('[KorterPublisher] ERR_ABORTED on goto, retrying...');
               await delay(2000);
-              await page.goto('https://korter.ge/ru/property/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await page.goto('https://korter.ge/ru/property/create', { timeout: 30000 });
+              await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
           } else {
               throw e;
           }
       }
+      console.log(`[KorterPublisher] Finished navigating.`);
       await delay(2000);
 
       // Очистить форму перед заполнением
