@@ -79,8 +79,7 @@ export const korterAuthManager = {
       };
 
       console.log(`[KorterAuth] Navigating to https://korter.ge/ru`);
-      await page.goto('https://korter.ge/ru', { timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
-      await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => console.log('Auth domcontentloaded timed out'));
+      await page.goto('https://korter.ge/ru', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
       
       // ЗАКРЫВАЕМ ОКНО ПРАВИЛ ЕСЛИ ЕСТЬ, И ПАПНЕЛИ ПЕРЕВОДА
       await delay(3000); // Give it a moment to render

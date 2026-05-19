@@ -1,7 +1,7 @@
 import { chromium } from 'playwright-core';
 
 async function run() {
-  console.log("Starting Browserbase test...");
+  console.log("Starting Browserbase test with custom proxy...");
   try {
     const BROWSERBASE_API_KEY = process.env.BROWSERBASE_API_KEY || 'bb_live_5oJ0ciNxBPE2UuE1HbrC4JEvBDw';
     const BROWSERBASE_PROJECT_ID = process.env.BROWSERBASE_PROJECT_ID || '7f1b4130-5234-4500-b051-9f330df88506';
@@ -24,28 +24,32 @@ async function run() {
     console.log("Session created:", bbSessionData.id);
     const sessionId = bbSessionData.id;
 
+    // Use stealth options for Browserbase
     const params = new URLSearchParams({
       apiKey: BROWSERBASE_API_KEY,
       sessionId: sessionId,
       enableStealth: 'true', 
-      enableWebGL: 'true',   
-      viewport: JSON.stringify({ width: 1280, height: 1024 }) 
+      enableWebGL: 'true',
+      viewport: JSON.stringify({ width: 1280, height: 1024 })
     });
     const wsUrl = `wss://connect.browserbase.com?${params.toString()}`;
-    console.log('WS URL:', wsUrl);
 
-    console.log('🚀 Подключаемся к Browserbase (Stealth + WebGL + Viewport)...');
+    console.log('🚀 Подключаемся к Browserbase...');
     const browser = await chromium.connectOverCDP(wsUrl);
-    
     console.log('Connected!');
     
-    const context = browser.contexts()[0] || await browser.newContext();
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 1024 }
+    });
+
     const page = await context.newPage();
-    console.log("Navigating...");
-    await page.goto("https://korter.ge/ru/property/create", { waitUntil: "domcontentloaded" });
+    console.log("Navigating to example...");
+    await page.goto("https://korter.ge/ru", { waitUntil: "domcontentloaded", timeout: 30000 });
+    
     const title = await page.title();
     console.log("Title: ", title);
     console.log("URL:", page.url());
+    
     await browser.close();
   } catch (e) {
     console.error(e);

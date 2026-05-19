@@ -80,37 +80,13 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     }
     const state = sessionData.state; // playwright storage state
     
-    // 3. Запускаем Browserbase браузер
-    const BROWSERBASE_API_KEY = process.env.BROWSERBASE_API_KEY || 'bb_live_5oJ0ciNxBPE2UuE1HbrC4JEvBDw';
-    const BROWSERBASE_PROJECT_ID = process.env.BROWSERBASE_PROJECT_ID || '7f1b4130-5234-4500-b051-9f330df88506';
-
-    const sessionResponse = await fetch('https://api.browserbase.com/v1/sessions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-BB-API-Key': BROWSERBASE_API_KEY
-      },
-      body: JSON.stringify({
-        projectId: BROWSERBASE_PROJECT_ID
-      })
-    });
+    // 3. Запускаем Browserless браузер
+    const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY || '2UXs6i0fsLYWgh492b9b7402620fedfb4441d8bf1be1b25bc';
     
-    if (!sessionResponse.ok) {
-        throw new Error(`Browserbase session creation failed: ${await sessionResponse.text()}`);
-    }
-    const bbSessionData = await sessionResponse.json();
-    const sessionId = bbSessionData.id;
-
-    const params = new URLSearchParams({
-      apiKey: BROWSERBASE_API_KEY,
-      sessionId: sessionId,
-      enableStealth: 'true', 
-      enableWebGL: 'true',   
-      viewport: JSON.stringify({ width: 1280, height: 1024 }) 
-    });
-    const wsUrl = `wss://connect.browserbase.com?${params.toString()}`;
-    console.log('🚀 Подключаемся к Browserbase (Stealth + WebGL + Viewport)...');
-    const browser = await chromium.connectOverCDP(wsUrl);
+    // Playwright endpoint for browserless
+    const wsUrl = `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`;
+    console.log('🚀 Подключаемся к Browserless (Stealth)...');
+    const browser = await chromium.connect({ wsEndpoint: wsUrl, timeout: 60000 });
     
     try {
       console.log(`[KorterPublisher] Opened browser, applying state...`);
@@ -119,23 +95,21 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
         locale: 'ru-RU',
         permissions: ['geolocation'],
         geolocation: { latitude: 41.6410, longitude: 41.6310 },
-        timezoneId: 'Asia/Tbilisi'
+        timezoneId: 'Asia/Tbilisi',
+        viewport: { width: 1280, height: 1024 }
       });
       const page = await context.newPage();
-      await page.setViewportSize({ width: 1280, height: 1024 });
       
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
       console.log(`[KorterPublisher] Navigating to creation page...`);
       try {
-          await page.goto('https://korter.ge/ru/property/create', { timeout: 30000 });
-          await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => console.log('Load state domcontentloaded timed out'));
+          await page.goto('https://korter.ge/ru/property/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
       } catch (e: any) {
           if (e.message && e.message.includes('ERR_ABORTED')) {
               console.log('[KorterPublisher] ERR_ABORTED on goto, retrying...');
               await delay(2000);
-              await page.goto('https://korter.ge/ru/property/create', { timeout: 30000 });
-              await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+              await page.goto('https://korter.ge/ru/property/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
           } else {
               throw e;
           }
@@ -540,7 +514,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
 
       await browser.close().catch(()=>{});
       
-      console.log(`[KorterPublisher] Browserbase session ${sessionId} closed.`);
+      console.log(`[KorterPublisher] Browserless session closed.`);
 
     } catch (e: any) {
       console.error(`[KorterPublisher] Error:`, e);
