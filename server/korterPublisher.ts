@@ -85,8 +85,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     
     // Playwright endpoint for browserless
     const wsUrl = `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`;
-    console.log('🚀 Подключаемся к Browserless (Stealth)...');
-    const browser = await chromium.connect({ wsEndpoint: wsUrl, timeout: 60000 });
+    console.log('🚀 Подключаемся к Browserless (CDP)...');
+    const browser = await chromium.connectOverCDP(wsUrl);
     
     try {
       console.log(`[KorterPublisher] Opened browser, applying state...`);

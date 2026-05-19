@@ -8,11 +8,16 @@ async function run() {
     // Playwright endpoint for browserless
     const wsUrl = `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`;
     
-    console.log('🚀 Подключаемся к Browserless (wsEndpoint)...');
-    console.time('connect');
-    const browser = await chromium.connect({ wsEndpoint: wsUrl, timeout: 60000 });
-    console.timeEnd('connect');
-    console.log('Connected!');
+    console.log('🚀 Подключаемся к Browserless (CDP):', wsUrl.replace(BROWSERLESS_API_KEY, '***'));
+    console.log('Awaiting connectOverCDP...');
+    let browser;
+    try {
+      browser = await chromium.connectOverCDP(wsUrl);
+      console.log('Connected!');
+    } catch (err) {
+      console.error('Connect failed:', err);
+      process.exit(1);
+    }
     
     console.time('newContext');
     const context = await browser.newContext({
