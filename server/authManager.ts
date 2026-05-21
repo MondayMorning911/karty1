@@ -15,35 +15,18 @@ export class AuthManager {
     if (platform === 'ssge') targetUrl = 'https://account.ss.ge/ka/account/login?returnUrl=%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3Dssweb%26scope%3Dbanners%2520files%2520house_api%2520offline_access%2520openid%2520paid_services%2520profile%2520real_estate%2520statistics%2520user_registration%2520web_apigateway%26response_type%3Dcode%26redirect_uri%3Dhttps%253A%252F%252Fhome.ss.ge%252Fapi%252Fauth%252Fcallback%252Fidentity-server4%26authority%3Dhttps%253A%252F%252Faccount.ss.ge%26post_logout_redirect_uri%3Dhttps%253A%252F%252Fhome.ss.ge%26response_mode%3Dquery%26code_challenge%3DQlEwHPQ_sdS-Rka6pg4x-_HwCJm34R0o6Wsy928y7fs%26code_challenge_method%3DS256';
     if (platform === 'realting') targetUrl = 'https://realting.com/ru/login';
 
-    const STEEL_API_KEY = process.env.STEEL_API_KEY || 'ste-S2WXkR2diAvFIHVgXUD5xwc35sa0VolIMSsnz6PU4SCIKNgWEwvRSH6EzlaCeT7P7jleUWCbrbZHLyFLWToNf7lDSE62nZjZ6A6';
-    
-    console.log(`[AuthManager] Creating Steel.dev session for ${platform}...`);
-    const sessionResponse = await fetch('https://api.steel.dev/v1/sessions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'steel-api-key': STEEL_API_KEY
-      },
-      body: JSON.stringify({
-        proxyUrl: 'http://d0e326028eb23797:vh6bDxAKJj7XUsSq@res.proxy-seller.com:10000',
-        isStealth: true
-      })
-    });
-    
-    if (!sessionResponse.ok) {
-        throw new Error(`Steel session creation failed: ${await sessionResponse.text()}`);
-    }
-    const sessionData = await sessionResponse.json();
-    const sessionId = sessionData.id;
-
-    const browser = await chromium.connectOverCDP(`wss://connect.steel.dev?apiKey=${STEEL_API_KEY}&sessionId=${sessionId}`);
+    const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true`;
+    console.log(`[AuthManager] Creating self-hosted Browserless session for ${platform}...`);
+    const browser = await chromium.connectOverCDP(wsUrl);
     
     try {
-      console.log(`[AuthManager] Connected to Steel.dev browser context for ${platform}...`);
-      const context = browser.contexts()[0];
+      console.log(`[AuthManager] Connected to Browserless context for ${platform}...`);
+      const context = browser.contexts()[0] || await browser.newContext();
       
       console.log(`[AuthManager] Opening new page for ${platform}...`);
       const page = await context.newPage();
+      const sessionId = 'browserless-' + Math.random().toString(36).substring(7);
       
       // Блокируем лишние ресурсы для ускорения загрузки
       await page.route('**/*', (route) => {
@@ -161,24 +144,11 @@ export class AuthManager {
       await context.close().catch(() => {});
       await browser.close().catch(() => {});
       
-      console.log(`[AuthManager] Releasing Steel session ${sessionId}...`);
-      await fetch(`https://api.steel.dev/v1/sessions/${sessionId}/release`, {
-        method: 'POST',
-        headers: {
-          'steel-api-key': STEEL_API_KEY
-        }
-      }).catch(e => console.error("Error releasing session:", e));
+      console.log(`[AuthManager] Session ${sessionId} closed.`);
 
       return { success: true };
     } catch (error: any) {
       await browser.close().catch(() => {});
-      console.log(`[AuthManager] Releasing Steel session ${sessionId} on error...`);
-      await fetch(`https://api.steel.dev/v1/sessions/${sessionId}/release`, {
-        method: 'POST',
-        headers: {
-          'steel-api-key': STEEL_API_KEY
-        }
-      }).catch(e => console.error("Error releasing session:", e));
       console.error(`[AuthManager] Failed to login:`, error.message);
       throw error;
     }

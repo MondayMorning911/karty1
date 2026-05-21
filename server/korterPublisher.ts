@@ -80,12 +80,11 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     }
     const state = sessionData.state; // playwright storage state
     
-    // 3. Запускаем Browserless браузер
-    const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY || '2UXs6i0fsLYWgh492b9b7402620fedfb4441d8bf1be1b25bc';
+    // 3. Запускаем свой Browserless браузер на сервере
+    const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true`;
     
-    // Playwright endpoint for browserless
-    const wsUrl = `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`;
-    console.log('🚀 Подключаемся к Browserless (CDP)...');
+    console.log('🚀 Подключаемся к self-hosted Browserless (CDP) на 72.56.1.59:3010...');
     const browser = await chromium.connectOverCDP(wsUrl);
     
     try {

@@ -3,12 +3,12 @@ import { chromium } from 'playwright-core';
 async function run() {
   console.log("Starting Browserless test...");
   try {
-    const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY || '2UXs6i0fsLYWgh492b9b7402620fedfb4441d8bf1be1b25bc';
+    const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
     
     // Playwright endpoint for browserless
-    const wsUrl = `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`;
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true`;
     
-    console.log('🚀 Подключаемся к Browserless (CDP):', wsUrl.replace(BROWSERLESS_API_KEY, '***'));
+    console.log('🚀 Подключаемся к Browserless (CDP):', wsUrl.replace(BROWSERLESS_TOKEN, '***'));
     console.log('Awaiting connectOverCDP...');
     let browser;
     try {

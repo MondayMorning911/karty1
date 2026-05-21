@@ -22,43 +22,18 @@ export const korterAuthManager = {
   // ШАГ 1: Инициация входа
   async startLogin(userId: string, phoneOrEmail: string) {
     try {
-      const BROWSERBASE_API_KEY = process.env.BROWSERBASE_API_KEY || 'bb_live_5oJ0ciNxBPE2UuE1HbrC4JEvBDw';
-      const BROWSERBASE_PROJECT_ID = process.env.BROWSERBASE_PROJECT_ID || '7f1b4130-5234-4500-b051-9f330df88506';
+      const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
       
-      console.log(`[KorterAuth] Creating Browserbase session...`);
-      const sessionResponse = await fetch('https://api.browserbase.com/v1/sessions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-BB-API-Key': BROWSERBASE_API_KEY
-        },
-        body: JSON.stringify({
-          projectId: BROWSERBASE_PROJECT_ID
-        })
-      });
-      
-      if (!sessionResponse.ok) {
-          throw new Error(`Browserbase session creation failed: ${await sessionResponse.text()}`);
-      }
-      const sessionData = await sessionResponse.json();
-      const sessionId = sessionData.id;
-
-      const params = new URLSearchParams({
-        apiKey: BROWSERBASE_API_KEY,
-        sessionId: sessionId,
-        enableStealth: 'true', 
-        enableWebGL: 'true',   
-        viewport: JSON.stringify({ width: 1280, height: 1024 }) 
-      });
-      const wsUrl = `wss://connect.browserbase.com?${params.toString()}`;
-      console.log('🚀 Подключаемся к Browserbase (Stealth + WebGL + Viewport)...');
+      const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true`;
+      console.log('🚀 Подключаемся к self-hosted Browserless (Stealth)...');
       const browser = await chromium.connectOverCDP(wsUrl);
       
-      console.log(`[KorterAuth] Connected to Browserbase browser context...`);
+      console.log(`[KorterAuth] Connected to Browserless context...`);
       const context = browser.contexts()[0] || await browser.newContext();
 
       console.log(`[KorterAuth] Opening new page...`);
       const page = await context.newPage();
+      const sessionId = 'browserless-' + Math.random().toString(36).substring(7);
       await page.setViewportSize({ width: 1280, height: 1024 });
 
       // Блокируем скрипты аналитики
@@ -124,9 +99,9 @@ export const korterAuthManager = {
       activeAuthSessions[userId] = { browser, context, page, sessionId };
       return { status: 'awaiting_code' };
     } catch (error: any) {
-      console.error('Korter Start Login Error:', error);
+      console.log('Korter Start Login Error:', error);
       try {
-        console.log(`[KorterAuth] Releasing Browserbase session on error...`);
+        console.log(`[KorterAuth] Releasing Browserless session on error...`);
         const session = activeAuthSessions[userId];
         if (session) {
           await session.browser.close().catch(() => {});
@@ -207,15 +182,15 @@ export const korterAuthManager = {
       await page.close().catch(() => {});
       await context.close().catch(() => {});
       await browser.close().catch(() => {});
-      console.log(`[KorterAuth] Browserbase session ${session.sessionId} closed.`);
+      console.log(`[KorterAuth] Browserless session ${session.sessionId} closed.`);
 
       delete activeAuthSessions[userId];
       return { status: 'success' };
     } catch (error: any) {
-      await browser.close().catch(() => {});
-      try {
-        console.log(`[KorterAuth] Releasing Browserbase session on error...`);
-      } catch (e) {}
+      const session = activeAuthSessions[userId];
+      if (session) {
+          await session.browser.close().catch(() => {});
+      }
       delete activeAuthSessions[userId];
       console.error('Korter Verify Code Error:', error);
       return { status: 'error', message: error.message || "Failed to verify code" };
