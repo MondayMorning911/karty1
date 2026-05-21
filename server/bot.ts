@@ -15,7 +15,7 @@ export function startBot() {
     return;
   }
 
-  const proxyUrl = process.env.TELEGRAM_PROXY_URL || process.env.PROXY_URL;
+  const proxyUrl = process.env.TELEGRAM_PROXY_URL;
   let requestOpts: any = undefined;
   
   if (proxyUrl) {

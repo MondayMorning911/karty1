@@ -2,24 +2,12 @@ import { chromium } from 'playwright-core';
 import type { Page, BrowserContext } from 'playwright-core';
 import { supabaseServer } from './supabase.js';
 import OpenAI from 'openai';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import { SocksProxyAgent } from 'socks-proxy-agent';
 import dotenv from 'dotenv';
 dotenv.config();
-
-let httpAgent;
-if (process.env.PROXY_URL) {
-  if (process.env.PROXY_URL.startsWith('socks')) {
-    httpAgent = new SocksProxyAgent(process.env.PROXY_URL);
-  } else {
-    httpAgent = new HttpsProxyAgent(process.env.PROXY_URL);
-  }
-}
 
 const openai = new OpenAI({
   baseURL: 'https://api.deepseek.com',
   apiKey: process.env.DEEPSEEK_API_KEY,
-  httpAgent: httpAgent,
 });
 
 
@@ -82,10 +70,10 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
     
     // 3. Запускаем свой Browserless браузер на сервере
     const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
-    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true`;
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&timeout=600000`;
     
     console.log('🚀 Подключаемся к self-hosted Browserless (CDP) на 72.56.1.59:3010...');
-    const browser = await chromium.connectOverCDP(wsUrl);
+    const browser = await chromium.connectOverCDP(wsUrl, { timeout: 0 });
     
     try {
       console.log(`[KorterPublisher] Opened browser, applying state...`);
@@ -98,6 +86,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
         viewport: { width: 1280, height: 1024 }
       });
       const page = await context.newPage();
+      page.setDefaultTimeout(60000);
+      page.setDefaultNavigationTimeout(60000);
       
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -128,7 +118,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               if (await btn.isVisible().catch(()=>false)) {
                   console.log(`[Korter] Form clear button found, clicking...`);
                   await btn.click({ force: true }).catch(()=>{});
-                  await delay(1000);
+                  await delay(300);
                   break;
               }
           }
@@ -150,7 +140,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             } else {
                await page.getByText('Тип сделки', { exact: false }).last().click({ force: true }).catch(()=>{});
             }
-            await delay(1000);
+            await delay(300);
             
             // Try to find the correct option
             const opt = page.locator(`css=div:has-text("${targetDealText}")`).filter({ hasText: new RegExp(`^${targetDealText}$`) }).last();
@@ -163,7 +153,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                await fallbackOpt.click({ force: true });
                foundDealType = true;
             }
-            await delay(500);
+            await delay(300);
         } catch(e) {
             console.log("Failed modern dealType");
         }
@@ -173,7 +163,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             const dealBoxes = page.locator('div.s4r9iw1, div.lxrdcjb', { hasText: new RegExp(`^${targetDealText}$`) });
             if (await dealBoxes.first().isVisible().catch(()=>false)) {
                 await dealBoxes.first().click().catch(()=>{});
-                await delay(500);
+                await delay(300);
             }
         }
       }
@@ -189,7 +179,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             } else {
                await page.getByText('Тип недвижимости', { exact: false }).last().click({ force: true }).catch(()=>{});
             }
-            await delay(1000);
+            await delay(300);
             
             const opt = page.locator(`css=div:has-text("${parsed.propertyType}")`).filter({ hasText: new RegExp(`^${parsed.propertyType}$`) }).last();
             if (await opt.isVisible().catch(()=>false)) {
@@ -200,7 +190,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                await fallbackOpt.click({ force: true });
                foundPropType = true;
             }
-            await delay(500);
+            await delay(300);
         } catch(e) {
             console.log("Failed modern propertyType");
         }
@@ -209,7 +199,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             const typeBoxes = page.locator('div.s4r9iw1, div.lxrdcjb', { hasText: new RegExp(`^${parsed.propertyType}$`) });
             if (await typeBoxes.first().isVisible().catch(()=>false)) {
                 await typeBoxes.first().click().catch(()=>{});
-                await delay(500);
+                await delay(300);
             }
         }
       }
@@ -218,12 +208,12 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       if (parsed.propertyType === 'Дом' && parsed.houseType) {
           const typeBox = page.locator(`button:has-text("${parsed.houseType}"), div:has-text("${parsed.houseType}")`).last();
           await typeBox.click({ force: true }).catch(()=>{});
-          await delay(500);
+          await delay(300);
       }
       if (parsed.propertyType === 'Коммерческая недвижимость' && parsed.commercialType) {
           const typeBox = page.locator(`button:has-text("${parsed.commercialType}"), div:has-text("${parsed.commercialType}")`).last();
           await typeBox.click({ force: true }).catch(()=>{});
-          await delay(500);
+          await delay(300);
       }
 
       // Город и Адрес
@@ -231,7 +221,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const mapCanvas = page.locator('canvas.mapboxgl-canvas').first();
           if (await mapCanvas.isVisible().catch(()=>false)) {
               await mapCanvas.scrollIntoViewIfNeeded().catch(()=>{});
-              await delay(2000); // give map time to load tiles
+              await delay(500); // give map time to load tiles
           }
       } catch (e) {}
 
@@ -239,8 +229,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const mskInput = page.locator('input[name="custom.geoObjectSearch"]').first();
           if (await mskInput.isVisible().catch(()=>false)) {
               await mskInput.fill('');
-              await mskInput.type(parsed.city, { delay: 100 });
-              await delay(1500);
+              await mskInput.type(parsed.city, { delay: 50 });
+              await delay(400);
               let suggest = page.locator('div.s7gnlt', { hasText: parsed.city }).first();
               if (await suggest.isVisible().catch(()=>false)) {
                   await suggest.click({ force: true }).catch(()=>{});
@@ -252,15 +242,15 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                       await page.keyboard.press('Enter').catch(()=>{});
                   }
               }
-              await delay(500);
+              await delay(300);
           }
       }
       if (parsed.street) {
           const strInput = page.locator('input[name="street"]').first();
           if (await strInput.isVisible().catch(()=>false)) {
               await strInput.fill('');
-              await strInput.type(parsed.street, { delay: 100 });
-              await delay(2000);
+              await strInput.type(parsed.street, { delay: 50 });
+              await delay(500);
               
               const suggest = page.locator('div.s7gnlt');
               const count = await suggest.count();
@@ -280,7 +270,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               } else {
                   await page.keyboard.press('Enter').catch(()=>{});
               }
-              await delay(2000);
+              await delay(400);
           }
       }
       if (parsed.houseNumber) {
@@ -288,7 +278,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           if (await numInput.isVisible().catch(()=>false)) {
               let currentNum = parseInt(String(parsed.houseNumber).replace(/[^\d]/g, '')) || 1;
               await numInput.fill(String(parsed.houseNumber));
-              await delay(1500);
+              await delay(400);
               
               const suggest = page.locator('div.s7gnlt');
               if (await suggest.count() > 0) {
@@ -296,7 +286,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               } else {
                   await page.keyboard.press('Enter').catch(()=>{});
               }
-              await delay(1000);
+              await delay(400);
 
               // Check if map error appeared
               const errorLocator = page.locator('text="Мы не нашли такой дом"').first();
@@ -392,7 +382,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   if (await fileInput.count() > 0) {
                       await fileInput.setInputFiles(fileBuffers as any);
                       // wait for uploads to process
-                      await delay(photos.length * 2000 + 3000);
+                      await delay(3000);
                       
                       const photoErrors = await page.locator('text="удалите или обновите загруженные фотографии"').count();
                       if (photoErrors > 0) {
@@ -442,7 +432,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   const mskInput = page.locator('input[name="custom.geoObjectSearch"]').first();
                   if (await mskInput.isVisible().catch(()=>false)) {
                       await mskInput.fill('');
-                      await mskInput.type(parsed.city, { delay: 100 });
+                      await mskInput.type(parsed.city, { delay: 50 });
                       await delay(1500);
                       await page.keyboard.press('Enter').catch(()=>{});
                       await delay(500);
@@ -457,7 +447,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   const strInput = page.locator('input[name="street"]').first();
                   if (await strInput.isVisible().catch(()=>false)) {
                       await strInput.fill('');
-                      await strInput.type(parsed.street, { delay: 100 });
+                      await strInput.type(parsed.street, { delay: 50 });
                       await delay(1500);
                       await page.keyboard.press('Enter').catch(()=>{});
                       await delay(500);
@@ -467,7 +457,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   const numInput = page.locator('input[name="houseNumber"]').first();
                   if (await numInput.isVisible().catch(()=>false)) {
                       await numInput.fill('');
-                      await numInput.type(String(parsed.houseNumber), { delay: 100 });
+                      await numInput.type(String(parsed.houseNumber), { delay: 50 });
                       await delay(1000);
                       await page.keyboard.press('Enter').catch(()=>{});
                       await delay(500);

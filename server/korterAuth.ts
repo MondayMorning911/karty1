@@ -24,9 +24,9 @@ export const korterAuthManager = {
     try {
       const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
       
-      const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true`;
+      const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&timeout=600000`;
       console.log('🚀 Подключаемся к self-hosted Browserless (Stealth)...');
-      const browser = await chromium.connectOverCDP(wsUrl);
+      const browser = await chromium.connectOverCDP(wsUrl, { timeout: 0 });
       
       console.log(`[KorterAuth] Connected to Browserless context...`);
       const context = browser.contexts()[0] || await browser.newContext();
@@ -85,7 +85,7 @@ export const korterAuthManager = {
       await inputLocator.waitFor({ state: 'visible', timeout: 15000 });
       await inputLocator.click();
       await delay(Math.random() * 200 + 100);
-      await inputLocator.type(phoneOrEmail, { delay: 100 });
+      await inputLocator.type(phoneOrEmail, { delay: 50 });
       
       console.log(`[KorterAuth] Wait for confirm button...`);
       // Click Войти button 
@@ -132,7 +132,7 @@ export const korterAuthManager = {
       await smsInput.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
       await smsInput.click();
       await delay(200);
-      await smsInput.type(smsCode, { delay: 100 });
+      await smsInput.type(smsCode, { delay: 50 });
       
       console.log(`[KorterAuth] SMS code inputted. Waiting for success profile element...`);
       await delay(2000);

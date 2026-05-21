@@ -16,9 +16,9 @@ export class AuthManager {
     if (platform === 'realting') targetUrl = 'https://realting.com/ru/login';
 
     const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
-    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true`;
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&timeout=600000`;
     console.log(`[AuthManager] Creating self-hosted Browserless session for ${platform}...`);
-    const browser = await chromium.connectOverCDP(wsUrl);
+    const browser = await chromium.connectOverCDP(wsUrl, { timeout: 0 });
     
     try {
       console.log(`[AuthManager] Connected to Browserless context for ${platform}...`);
