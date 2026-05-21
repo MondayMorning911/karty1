@@ -31,16 +31,16 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
 - houseType: "Частный дом" | "Коттедж" | "Таунхаус" | "Дуплекс" | "Дача" (если это Дом, иначе null)
 - commercialType: "Офис" | "Склад" | "Магазин" | "Кафе" | "Отель" | "Гараж" | "Паркинг" (если Коммерция, иначе null)
 - city: Город (если не указано, "Батуми")
-- street: Название улицы (если есть, без слова улица/ул, только название)
-- houseNumber: Номер дома (только число/строка)
-- floor: Этаж (только число, по умолчанию 2)
-- floorCount: Этажность дома (только число). Если в тексте не указано, напишите случайное число от Этаж+2 до Этаж+5 (например, если этаж 4, укажите 7). Если этаж тоже не указан, укажите 12. Этажность ВСЕГДА должна быть выше этажа.
-- rooms: Количество комнат (от 1 до 5)
-- bedrooms: Количество спален (от 1 до 4)
-- bathrooms: Количество санузлов (от 1 до 3)
-- area: Общая площадь (число, точная или примерная)
-- price: Цена в долларах (только число)
-- description: Красивое полное описание для публикации (можно использовать сам текст или немного улучшить)
+- street: Название улицы (если нет, по умолчанию укажите "Шерифа Химшиашвили" для Батуми или случайную улицу)
+- houseNumber: Номер дома (только число/строка. Если нет, укажите 1)
+- floor: Этаж (число, по умолчанию 2)
+- floorCount: Этажность дома (число, случайное 7-25, должно быть больше этажа)
+- rooms: Количество комнат (от 1 до 5, если не указано - 2)
+- bedrooms: Количество спален (от 1 до 4, если не указано - 1)
+- bathrooms: Количество санузлов (от 1 до 3, если не указано - 1)
+- area: Общая площадь (число, если не указано - 45)
+- price: Цена в долларах (только число, если не указано - 50000)
+- description: Красивое полное описание для публикации (обязательно должно быть, можно использовать текст)
 
 Верните ТОЛЬКО JSON с этими ключами, без markdown-разметки \`\`\`json.
 `;
@@ -118,7 +118,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               if (await btn.isVisible().catch(()=>false)) {
                   console.log(`[Korter] Form clear button found, clicking...`);
                   await btn.click({ force: true }).catch(()=>{});
-                  await delay(300);
+                  await delay(Math.random() * 4000 + 3000);
                   break;
               }
           }
@@ -140,7 +140,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             } else {
                await page.getByText('Тип сделки', { exact: false }).last().click({ force: true }).catch(()=>{});
             }
-            await delay(300);
+            await delay(Math.random() * 4000 + 3000);
             
             // Try to find the correct option
             const opt = page.locator(`css=div:has-text("${targetDealText}")`).filter({ hasText: new RegExp(`^${targetDealText}$`) }).last();
@@ -153,7 +153,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                await fallbackOpt.click({ force: true });
                foundDealType = true;
             }
-            await delay(300);
+            await delay(Math.random() * 4000 + 3000);
         } catch(e) {
             console.log("Failed modern dealType");
         }
@@ -163,7 +163,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             const dealBoxes = page.locator('div.s4r9iw1, div.lxrdcjb', { hasText: new RegExp(`^${targetDealText}$`) });
             if (await dealBoxes.first().isVisible().catch(()=>false)) {
                 await dealBoxes.first().click().catch(()=>{});
-                await delay(300);
+                await delay(Math.random() * 4000 + 3000);
             }
         }
       }
@@ -179,7 +179,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             } else {
                await page.getByText('Тип недвижимости', { exact: false }).last().click({ force: true }).catch(()=>{});
             }
-            await delay(300);
+            await delay(Math.random() * 4000 + 3000);
             
             const opt = page.locator(`css=div:has-text("${parsed.propertyType}")`).filter({ hasText: new RegExp(`^${parsed.propertyType}$`) }).last();
             if (await opt.isVisible().catch(()=>false)) {
@@ -190,7 +190,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                await fallbackOpt.click({ force: true });
                foundPropType = true;
             }
-            await delay(300);
+            await delay(Math.random() * 4000 + 3000);
         } catch(e) {
             console.log("Failed modern propertyType");
         }
@@ -199,7 +199,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
             const typeBoxes = page.locator('div.s4r9iw1, div.lxrdcjb', { hasText: new RegExp(`^${parsed.propertyType}$`) });
             if (await typeBoxes.first().isVisible().catch(()=>false)) {
                 await typeBoxes.first().click().catch(()=>{});
-                await delay(300);
+                await delay(Math.random() * 4000 + 3000);
             }
         }
       }
@@ -208,12 +208,12 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       if (parsed.propertyType === 'Дом' && parsed.houseType) {
           const typeBox = page.locator(`button:has-text("${parsed.houseType}"), div:has-text("${parsed.houseType}")`).last();
           await typeBox.click({ force: true }).catch(()=>{});
-          await delay(300);
+          await delay(Math.random() * 4000 + 3000);
       }
       if (parsed.propertyType === 'Коммерческая недвижимость' && parsed.commercialType) {
           const typeBox = page.locator(`button:has-text("${parsed.commercialType}"), div:has-text("${parsed.commercialType}")`).last();
           await typeBox.click({ force: true }).catch(()=>{});
-          await delay(300);
+          await delay(Math.random() * 4000 + 3000);
       }
 
       // Город и Адрес
@@ -221,7 +221,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const mapCanvas = page.locator('canvas.mapboxgl-canvas').first();
           if (await mapCanvas.isVisible().catch(()=>false)) {
               await mapCanvas.scrollIntoViewIfNeeded().catch(()=>{});
-              await delay(500); // give map time to load tiles
+              await delay(Math.random() * 4000 + 3000); // give map time to load tiles
           }
       } catch (e) {}
 
@@ -229,10 +229,10 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const mskInput = page.locator('input[name="custom.geoObjectSearch"]').first();
           if (await mskInput.isVisible().catch(()=>false)) {
               await mskInput.fill('');
-              await mskInput.type(parsed.city, { delay: 100 });
+              await mskInput.type(parsed.city, { delay: 150 });
               
               const suggest = page.locator('div.s7gnlt').first();
-              await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+              await suggest.waitFor({ state: 'visible', timeout: 5000 }).catch(()=>{});
               
               const match = page.locator('div.s7gnlt', { hasText: parsed.city }).first();
               if (await match.isVisible().catch(()=>false)) {
@@ -242,17 +242,17 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               } else {
                   await page.keyboard.press('Enter').catch(()=>{});
               }
-              await delay(300);
+              await delay(Math.random() * 4000 + 3000);
           }
       }
       if (parsed.street) {
           const strInput = page.locator('input[name="street"]').first();
           if (await strInput.isVisible().catch(()=>false)) {
               await strInput.fill('');
-              await strInput.type(parsed.street, { delay: 100 });
+              await strInput.type(parsed.street, { delay: 150 });
               
               const suggest = page.locator('div.s7gnlt').first();
-              await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+              await suggest.waitFor({ state: 'visible', timeout: 5000 }).catch(()=>{});
               
               const count = await page.locator('div.s7gnlt').count();
               if (count > 0) {
@@ -271,7 +271,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               } else {
                   await page.keyboard.press('Enter').catch(()=>{});
               }
-              await delay(300);
+              await delay(Math.random() * 4000 + 3000);
           }
       }
       if (parsed.houseNumber) {
@@ -281,14 +281,14 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
               await numInput.fill(String(parsed.houseNumber));
               
               const suggest = page.locator('div.s7gnlt').first();
-              await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+              await suggest.waitFor({ state: 'visible', timeout: 5000 }).catch(()=>{});
               
               if (await suggest.isVisible().catch(()=>false)) {
                   await suggest.click({ force: true }).catch(()=>{});
               } else {
                   await page.keyboard.press('Enter').catch(()=>{});
               }
-              await delay(400);
+              await delay(Math.random() * 4000 + 3000);
 
               // Check if map error appeared
               const errorLocator = page.locator('text="Мы не нашли такой дом"').first();
@@ -298,22 +298,22 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   for (let i = 1; i <= 10; i++) {
                       // up
                       await numInput.fill(String(currentNum + i));
-                      await suggest.waitFor({ state: 'visible', timeout: 1500 }).catch(()=>{});
+                      await suggest.waitFor({ state: 'visible', timeout: 5000 }).catch(()=>{});
                       let sug = page.locator('div.s7gnlt').first();
                       if (await sug.isVisible().catch(()=>false)) {
                           await sug.click({ force: true }).catch(()=>{});
-                          await delay(300);
+                          await delay(Math.random() * 4000 + 3000);
                           if (!await errorLocator.isVisible().catch(()=>false)) break;
                       }
 
                       // down
                       if (currentNum - i > 0) {
                           await numInput.fill(String(currentNum - i));
-                          await suggest.waitFor({ state: 'visible', timeout: 1500 }).catch(()=>{});
+                          await suggest.waitFor({ state: 'visible', timeout: 5000 }).catch(()=>{});
                           let sug2 = page.locator('div.s7gnlt').first();
                           if (await sug2.isVisible().catch(()=>false)) {
                               await sug2.click({ force: true }).catch(()=>{});
-                              await delay(300);
+                              await delay(Math.random() * 4000 + 3000);
                               if (!await errorLocator.isVisible().catch(()=>false)) break;
                           }
                       }
@@ -325,22 +325,24 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       // Этажи и Комнаты
       if (parsed.floor) {
           await page.fill('#floorNumber', String(parsed.floor)).catch(()=>{});
+          await delay(Math.random() * 2000 + 3000);
       }
       if (parsed.floorCount) {
           await page.fill('#floorCount', String(parsed.floorCount)).catch(()=>{});
+          await delay(Math.random() * 2000 + 3000);
       }
       
       if (parsed.rooms) {
           const rc = Math.min(Number(parsed.rooms), 5);
           const roomLocators = [
               page.locator(`label[for="roomCount-${rc}"]`),
-              page.locator(`label[for="room-${rc}"]`),
               page.getByText('Количество комнат', { exact: false }).locator('..').getByText(String(rc), { exact: true }).last(),
-              page.locator('label').filter({ hasText: new RegExp(`^${rc}$`) }).last()
+              page.getByText('Количество комнат', { exact: false }).locator('..').locator('button, div').filter({ hasText: new RegExp(`^${rc}$`) }).last()
           ];
           for (const loc of roomLocators) {
               if (await loc.isVisible().catch(()=>false)) {
                   await loc.click({ force: true }).catch(()=>{});
+                  await delay(Math.random() * 2000 + 3000);
                   break;
               }
           }
@@ -349,13 +351,13 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const bc = Math.min(Number(parsed.bedrooms), 4);
           const bedLocators = [
               page.locator(`label[for="bedroomCount-${bc}"]`),
-              page.locator(`label[for="bedroom-${bc}"]`),
               page.getByText('Количество спален', { exact: false }).locator('..').getByText(String(bc), { exact: true }).last(),
-              page.locator('label').filter({ hasText: new RegExp(`^${bc}$`) }).last()
+              page.getByText('Количество спален', { exact: false }).locator('..').locator('button, div').filter({ hasText: new RegExp(`^${bc}$`) }).last()
           ];
           for (const loc of bedLocators) {
               if (await loc.isVisible().catch(()=>false)) {
                   await loc.click({ force: true }).catch(()=>{});
+                  await delay(Math.random() * 2000 + 3000);
                   break;
               }
           }
@@ -364,13 +366,13 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const btc = Math.min(Number(parsed.bathrooms), 3);
           const bathLocators = [
               page.locator(`label[for="bathroomCount-${btc}"]`),
-              page.locator(`label[for="bathroom-${btc}"]`),
               page.getByText('Количество санузлов', { exact: false }).locator('..').getByText(String(btc), { exact: true }).last(),
-              page.locator('label').filter({ hasText: new RegExp(`^${btc}$`) }).last()
+              page.getByText('Количество санузлов', { exact: false }).locator('..').locator('button, div').filter({ hasText: new RegExp(`^${btc}$`) }).last()
           ];
           for (const loc of bathLocators) {
               if (await loc.isVisible().catch(()=>false)) {
                   await loc.click({ force: true }).catch(()=>{});
+                  await delay(Math.random() * 2000 + 3000);
                   break;
               }
           }
@@ -380,7 +382,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const areaInput = page.locator('#area, input[name="area"], input[placeholder*="Площадь"]').first();
           if (await areaInput.isVisible().catch(()=>false)) {
               await areaInput.fill('');
-              await areaInput.type(String(parsed.area), { delay: 50 });
+              await areaInput.type(String(parsed.area), { delay: 150 });
+              await delay(Math.random() * 2000 + 3000);
           }
       }
 
@@ -388,7 +391,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const descInput = page.locator('#description\\.ru-RU, textarea[name="description"], textarea[name*="description"], textarea').first();
           if (await descInput.isVisible().catch(()=>false)) {
               await descInput.fill('');
-              await descInput.type(parsed.description, { delay: 10 });
+              await descInput.type(parsed.description, { delay: 20 });
+              await delay(Math.random() * 2000 + 3000);
           }
       }
 
@@ -396,7 +400,8 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const priceInput = page.locator('#price, input[name="price"], input[placeholder*="Цена"]').first();
           if (await priceInput.isVisible().catch(()=>false)) {
               await priceInput.fill('');
-              await priceInput.type(String(parsed.price), { delay: 50 });
+              await priceInput.type(String(parsed.price), { delay: 150 });
+              await delay(Math.random() * 2000 + 3000);
           }
       }
 
@@ -472,9 +477,9 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   const mskInput = page.locator('input[name="custom.geoObjectSearch"]').first();
                   if (await mskInput.isVisible().catch(()=>false)) {
                       await mskInput.fill('');
-                      await mskInput.type(parsed.city, { delay: 100 });
+                      await mskInput.type(parsed.city, { delay: 150 });
                       const suggest = page.locator('div.s7gnlt').first();
-                      await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+                      await suggest.waitFor({ state: 'visible', timeout: 5000 }).catch(()=>{});
                       
                       const match = page.locator('div.s7gnlt', { hasText: parsed.city }).first();
                       if (await match.isVisible().catch(()=>false)) {
@@ -484,7 +489,7 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                       } else {
                           await page.keyboard.press('Enter').catch(()=>{});
                       }
-                      await delay(300);
+                      await delay(Math.random() * 4000 + 3000);
                   }
               }
               retried = true;
@@ -496,30 +501,30 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   const strInput = page.locator('input[name="street"]').first();
                   if (await strInput.isVisible().catch(()=>false)) {
                       await strInput.fill('');
-                      await strInput.type(parsed.street, { delay: 100 });
+                      await strInput.type(parsed.street, { delay: 150 });
                       const suggest = page.locator('div.s7gnlt').first();
-                      await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+                      await suggest.waitFor({ state: 'visible', timeout: 5000 }).catch(()=>{});
                       if (await suggest.isVisible().catch(()=>false)) {
                           await suggest.click({ force: true }).catch(()=>{});
                       } else {
                           await page.keyboard.press('Enter').catch(()=>{});
                       }
-                      await delay(300);
+                      await delay(Math.random() * 4000 + 3000);
                   }
               }
               if (parsed.houseNumber) {
                   const numInput = page.locator('input[name="houseNumber"]').first();
                   if (await numInput.isVisible().catch(()=>false)) {
                       await numInput.fill('');
-                      await numInput.type(String(parsed.houseNumber), { delay: 50 });
+                      await numInput.type(String(parsed.houseNumber), { delay: 150 });
                       const suggest = page.locator('div.s7gnlt').first();
-                      await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+                      await suggest.waitFor({ state: 'visible', timeout: 5000 }).catch(()=>{});
                       if (await suggest.isVisible().catch(()=>false)) {
                           await suggest.click({ force: true }).catch(()=>{});
                       } else {
                           await page.keyboard.press('Enter').catch(()=>{});
                       }
-                      await delay(300);
+                      await delay(Math.random() * 4000 + 3000);
                   }
               }
               retried = true;
