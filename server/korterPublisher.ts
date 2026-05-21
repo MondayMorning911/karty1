@@ -229,18 +229,18 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const mskInput = page.locator('input[name="custom.geoObjectSearch"]').first();
           if (await mskInput.isVisible().catch(()=>false)) {
               await mskInput.fill('');
-              await mskInput.type(parsed.city, { delay: 50 });
-              await delay(400);
-              let suggest = page.locator('div.s7gnlt', { hasText: parsed.city }).first();
-              if (await suggest.isVisible().catch(()=>false)) {
+              await mskInput.type(parsed.city, { delay: 100 });
+              
+              const suggest = page.locator('div.s7gnlt').first();
+              await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+              
+              const match = page.locator('div.s7gnlt', { hasText: parsed.city }).first();
+              if (await match.isVisible().catch(()=>false)) {
+                  await match.click({ force: true }).catch(()=>{});
+              } else if (await suggest.isVisible().catch(()=>false)) {
                   await suggest.click({ force: true }).catch(()=>{});
               } else {
-                  suggest = page.locator('div.s7gnlt').first();
-                  if (await suggest.isVisible().catch(()=>false)) {
-                      await suggest.click({ force: true }).catch(()=>{});
-                  } else {
-                      await page.keyboard.press('Enter').catch(()=>{});
-                  }
+                  await page.keyboard.press('Enter').catch(()=>{});
               }
               await delay(300);
           }
@@ -249,28 +249,29 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           const strInput = page.locator('input[name="street"]').first();
           if (await strInput.isVisible().catch(()=>false)) {
               await strInput.fill('');
-              await strInput.type(parsed.street, { delay: 50 });
-              await delay(500);
+              await strInput.type(parsed.street, { delay: 100 });
               
-              const suggest = page.locator('div.s7gnlt');
-              const count = await suggest.count();
+              const suggest = page.locator('div.s7gnlt').first();
+              await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+              
+              const count = await page.locator('div.s7gnlt').count();
               if (count > 0) {
                   let clicked = false;
                   for(let i = 0; i < count; i++) {
-                      const text = await suggest.nth(i).innerText();
+                      const text = await page.locator('div.s7gnlt').nth(i).innerText();
                       if (text.toLowerCase().includes(parsed.street.toLowerCase())) {
-                          await suggest.nth(i).click({ force: true }).catch(()=>{});
+                          await page.locator('div.s7gnlt').nth(i).click({ force: true }).catch(()=>{});
                           clicked = true;
                           break;
                       }
                   }
                   if (!clicked) {
-                      await suggest.first().click({ force: true }).catch(()=>{});
+                      await suggest.click({ force: true }).catch(()=>{});
                   }
               } else {
                   await page.keyboard.press('Enter').catch(()=>{});
               }
-              await delay(400);
+              await delay(300);
           }
       }
       if (parsed.houseNumber) {
@@ -278,11 +279,12 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
           if (await numInput.isVisible().catch(()=>false)) {
               let currentNum = parseInt(String(parsed.houseNumber).replace(/[^\d]/g, '')) || 1;
               await numInput.fill(String(parsed.houseNumber));
-              await delay(400);
               
-              const suggest = page.locator('div.s7gnlt');
-              if (await suggest.count() > 0) {
-                  await suggest.first().click({ force: true }).catch(()=>{});
+              const suggest = page.locator('div.s7gnlt').first();
+              await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+              
+              if (await suggest.isVisible().catch(()=>false)) {
+                  await suggest.click({ force: true }).catch(()=>{});
               } else {
                   await page.keyboard.press('Enter').catch(()=>{});
               }
@@ -296,22 +298,22 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   for (let i = 1; i <= 10; i++) {
                       // up
                       await numInput.fill(String(currentNum + i));
-                      await delay(800);
+                      await suggest.waitFor({ state: 'visible', timeout: 1500 }).catch(()=>{});
                       let sug = page.locator('div.s7gnlt').first();
                       if (await sug.isVisible().catch(()=>false)) {
                           await sug.click({ force: true }).catch(()=>{});
-                          await delay(800);
+                          await delay(300);
                           if (!await errorLocator.isVisible().catch(()=>false)) break;
                       }
 
                       // down
                       if (currentNum - i > 0) {
                           await numInput.fill(String(currentNum - i));
-                          await delay(800);
+                          await suggest.waitFor({ state: 'visible', timeout: 1500 }).catch(()=>{});
                           let sug2 = page.locator('div.s7gnlt').first();
                           if (await sug2.isVisible().catch(()=>false)) {
                               await sug2.click({ force: true }).catch(()=>{});
-                              await delay(800);
+                              await delay(300);
                               if (!await errorLocator.isVisible().catch(()=>false)) break;
                           }
                       }
@@ -330,34 +332,72 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
       
       if (parsed.rooms) {
           const rc = Math.min(Number(parsed.rooms), 5);
-          await page.locator(`label[for="roomCount-${rc}"]`).click({ force: true }).catch(async () => {
-              // fallback if label isn't there
-              await page.locator(`#roomCount-${rc}`).click({ force: true }).catch(()=>{});
-          });
+          const roomLocators = [
+              page.locator(`label[for="roomCount-${rc}"]`),
+              page.locator(`label[for="room-${rc}"]`),
+              page.getByText('Количество комнат', { exact: false }).locator('..').getByText(String(rc), { exact: true }).last(),
+              page.locator('label').filter({ hasText: new RegExp(`^${rc}$`) }).last()
+          ];
+          for (const loc of roomLocators) {
+              if (await loc.isVisible().catch(()=>false)) {
+                  await loc.click({ force: true }).catch(()=>{});
+                  break;
+              }
+          }
       }
       if (parsed.bedrooms) {
           const bc = Math.min(Number(parsed.bedrooms), 4);
-          await page.locator(`label[for="bedroomCount-${bc}"]`).click({ force: true }).catch(async () => {
-              await page.locator(`#bedroomCount-${bc}`).click({ force: true }).catch(()=>{});
-          });
+          const bedLocators = [
+              page.locator(`label[for="bedroomCount-${bc}"]`),
+              page.locator(`label[for="bedroom-${bc}"]`),
+              page.getByText('Количество спален', { exact: false }).locator('..').getByText(String(bc), { exact: true }).last(),
+              page.locator('label').filter({ hasText: new RegExp(`^${bc}$`) }).last()
+          ];
+          for (const loc of bedLocators) {
+              if (await loc.isVisible().catch(()=>false)) {
+                  await loc.click({ force: true }).catch(()=>{});
+                  break;
+              }
+          }
       }
       if (parsed.bathrooms) {
           const btc = Math.min(Number(parsed.bathrooms), 3);
-          await page.locator(`label[for="bathroomCount-${btc}"]`).click({ force: true }).catch(async () => {
-              await page.locator(`#bathroomCount-${btc}`).click({ force: true }).catch(()=>{});
-          });
+          const bathLocators = [
+              page.locator(`label[for="bathroomCount-${btc}"]`),
+              page.locator(`label[for="bathroom-${btc}"]`),
+              page.getByText('Количество санузлов', { exact: false }).locator('..').getByText(String(btc), { exact: true }).last(),
+              page.locator('label').filter({ hasText: new RegExp(`^${btc}$`) }).last()
+          ];
+          for (const loc of bathLocators) {
+              if (await loc.isVisible().catch(()=>false)) {
+                  await loc.click({ force: true }).catch(()=>{});
+                  break;
+              }
+          }
       }
 
       if (parsed.area) {
-          await page.fill('#area', String(parsed.area)).catch(()=>{});
+          const areaInput = page.locator('#area, input[name="area"], input[placeholder*="Площадь"]').first();
+          if (await areaInput.isVisible().catch(()=>false)) {
+              await areaInput.fill('');
+              await areaInput.type(String(parsed.area), { delay: 50 });
+          }
       }
 
       if (parsed.description) {
-          await page.fill('#description\\.ru-RU', parsed.description).catch(()=>{});
+          const descInput = page.locator('#description\\.ru-RU, textarea[name="description"], textarea[name*="description"], textarea').first();
+          if (await descInput.isVisible().catch(()=>false)) {
+              await descInput.fill('');
+              await descInput.type(parsed.description, { delay: 10 });
+          }
       }
 
       if (parsed.price) {
-          await page.fill('#price', String(parsed.price)).catch(()=>{});
+          const priceInput = page.locator('#price, input[name="price"], input[placeholder*="Цена"]').first();
+          if (await priceInput.isVisible().catch(()=>false)) {
+              await priceInput.fill('');
+              await priceInput.type(String(parsed.price), { delay: 50 });
+          }
       }
 
       // Upload photos
@@ -432,10 +472,19 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   const mskInput = page.locator('input[name="custom.geoObjectSearch"]').first();
                   if (await mskInput.isVisible().catch(()=>false)) {
                       await mskInput.fill('');
-                      await mskInput.type(parsed.city, { delay: 50 });
-                      await delay(1500);
-                      await page.keyboard.press('Enter').catch(()=>{});
-                      await delay(500);
+                      await mskInput.type(parsed.city, { delay: 100 });
+                      const suggest = page.locator('div.s7gnlt').first();
+                      await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+                      
+                      const match = page.locator('div.s7gnlt', { hasText: parsed.city }).first();
+                      if (await match.isVisible().catch(()=>false)) {
+                          await match.click({ force: true }).catch(()=>{});
+                      } else if (await suggest.isVisible().catch(()=>false)) {
+                          await suggest.click({ force: true }).catch(()=>{});
+                      } else {
+                          await page.keyboard.press('Enter').catch(()=>{});
+                      }
+                      await delay(300);
                   }
               }
               retried = true;
@@ -447,10 +496,15 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   const strInput = page.locator('input[name="street"]').first();
                   if (await strInput.isVisible().catch(()=>false)) {
                       await strInput.fill('');
-                      await strInput.type(parsed.street, { delay: 50 });
-                      await delay(1500);
-                      await page.keyboard.press('Enter').catch(()=>{});
-                      await delay(500);
+                      await strInput.type(parsed.street, { delay: 100 });
+                      const suggest = page.locator('div.s7gnlt').first();
+                      await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+                      if (await suggest.isVisible().catch(()=>false)) {
+                          await suggest.click({ force: true }).catch(()=>{});
+                      } else {
+                          await page.keyboard.press('Enter').catch(()=>{});
+                      }
+                      await delay(300);
                   }
               }
               if (parsed.houseNumber) {
@@ -458,9 +512,14 @@ export async function publishKorterAsync(userId: string, objectId: string, text:
                   if (await numInput.isVisible().catch(()=>false)) {
                       await numInput.fill('');
                       await numInput.type(String(parsed.houseNumber), { delay: 50 });
-                      await delay(1000);
-                      await page.keyboard.press('Enter').catch(()=>{});
-                      await delay(500);
+                      const suggest = page.locator('div.s7gnlt').first();
+                      await suggest.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>{});
+                      if (await suggest.isVisible().catch(()=>false)) {
+                          await suggest.click({ force: true }).catch(()=>{});
+                      } else {
+                          await page.keyboard.press('Enter').catch(()=>{});
+                      }
+                      await delay(300);
                   }
               }
               retried = true;
