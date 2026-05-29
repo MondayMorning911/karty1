@@ -358,7 +358,34 @@ function CreateTab({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: uid, objectId: docRef.id, text: desc, photos })
-        }).catch(console.error); // Ignore errors here, background processor will update firestore status
+        }).catch(console.error);
+      }
+
+      // Start publishing on Realting
+      if (activePlatformNames.includes('realting')) {
+        await fetch('/api/publish/realting', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: uid, objectId: docRef.id, text: desc, photos })
+        }).catch(console.error);
+      }
+      
+      // Start publishing on SS.ge
+      if (activePlatformNames.includes('ssge')) {
+        await fetch('/api/publish/ssge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: uid, objectId: docRef.id, text: desc, photos })
+        }).catch(console.error);
+      }
+
+      // Start publishing on MyHome
+      if (activePlatformNames.includes('myhome')) {
+        await fetch('/api/publish/myhome', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: uid, objectId: docRef.id, text: desc, photos })
+        }).catch(console.error);
       }
       
       setDesc("");

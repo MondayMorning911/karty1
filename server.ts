@@ -12,6 +12,10 @@ import fs from 'fs';
 
 
 
+import { publishRealtingAsync } from './server/realtingPublisher.js';
+import { publishSsgeAsync } from './server/ssgePublisher.js';
+import { publishMyhomeAsync } from './server/myhomePublisher.js';
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -136,6 +140,36 @@ echo "Steel Browser is running on port 8080"
     // Call background async
     publishKorterAsync(userId, objectId, text, photos);
     
+    res.json({ status: 'started' });
+  });
+
+  app.post('/api/publish/realting', async (req, res) => {
+    const { userId, objectId, text, photos } = req.body;
+    if (!userId || !objectId || !text) {
+      return res.status(400).json({ error: 'userId, objectId and text are required' });
+    }
+
+    // Call background async
+    publishRealtingAsync(userId, objectId, text, photos);
+    
+    res.json({ status: 'started' });
+  });
+
+  app.post('/api/publish/ssge', async (req, res) => {
+    const { userId, objectId, text, photos } = req.body;
+    if (!userId || !objectId || !text) {
+      return res.status(400).json({ error: 'userId, objectId and text are required' });
+    }
+    publishSsgeAsync(userId, objectId, text, photos);
+    res.json({ status: 'started' });
+  });
+
+  app.post('/api/publish/myhome', async (req, res) => {
+    const { userId, objectId, text, photos } = req.body;
+    if (!userId || !objectId || !text) {
+      return res.status(400).json({ error: 'userId, objectId and text are required' });
+    }
+    publishMyhomeAsync(userId, objectId, text, photos);
     res.json({ status: 'started' });
   });
 

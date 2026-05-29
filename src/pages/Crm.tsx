@@ -15,12 +15,14 @@ import {
   Briefcase
 } from 'lucide-react';
 import { KorterIcon, SSIcon, RealtingIcon, MyHomeIcon } from '../components/PlatformIcons';
+import { CrmChats } from './CrmChats';
 
-type Tab = 'dashboard' | 'leads' | 'finances' | 'agencies' | 'settings';
+type Tab = 'dashboard' | 'chat' | 'leads' | 'finances' | 'agencies' | 'settings';
 
 export function Crm() {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [userRole, setUserRole] = useState<'admin' | 'manager'>('admin'); // Toggle for demo
+  const [activeTab, setActiveTab] = useState<Tab>('chat');
+  const [userRole, setUserRole] = useState<'admin' | 'manager'>('manager'); // Toggle for demo
+  const [currentManagerId, setCurrentManagerId] = useState<string>('mgr-123'); // Admin's own id or selected
 
   return (
     <div className="flex h-screen bg-[#f7f9fc] dark:bg-[#0A0A0A] text-[#061b31] dark:text-gray-200 font-sans overflow-hidden transition-colors duration-500">
@@ -37,6 +39,7 @@ export function Crm() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
+          <NavItem icon={<MessageCircle />} label="Чаты и сообщения" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} badge="2" />
           <NavItem icon={<BarChart3 />} label="Дашборд" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           <NavItem icon={<Users />} label="База лидов" active={activeTab === 'leads'} onClick={() => setActiveTab('leads')} badge="12" />
           <NavItem icon={<CreditCard />} label="Финансы" active={activeTab === 'finances'} onClick={() => setActiveTab('finances')} />
@@ -67,9 +70,10 @@ export function Crm() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Topbar */}
-        <header className="h-16 bg-[#ffffff]/80 dark:bg-[#0F0F0F]/80 backdrop-blur-md border-b border-[#e5edf5] dark:border-[#1A1A1A] flex items-center justify-between px-8 z-10 transition-colors duration-500">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+        {/* Topbar only for other views */}
+        {activeTab !== 'chat' && (
+        <header className="h-16 bg-[#ffffff]/80 dark:bg-[#0F0F0F]/80 backdrop-blur-md border-b border-[#e5edf5] dark:border-[#1A1A1A] flex items-center justify-between px-8 z-20 transition-colors duration-500 absolute w-full top-0">
           <h1 className="text-[20px] font-bold tracking-tight">
             {activeTab === 'dashboard' && 'Общая сводка'}
             {activeTab === 'leads' && 'База лидов'}
@@ -93,13 +97,15 @@ export function Crm() {
             </button>
           </div>
         </header>
+        )}
 
         {/* Dynamic Content */}
-        <div className="flex-1 overflow-auto p-8 relative">
-          <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/10 blur-[100px] rounded-full pointer-events-none" />
+        <div className={`flex-1 overflow-auto relative ${activeTab === 'chat' ? 'p-0 pt-0' : 'p-8 pt-24'}`}>
+          {activeTab !== 'chat' && <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-[#533afd]/5 dark:bg-[#533afd]/10 blur-[100px] rounded-full pointer-events-none" />}
           
-          <div className="max-w-7xl mx-auto space-y-8 relative z-10">
+          <div className={`${activeTab === 'chat' ? 'h-full w-full max-w-none flex flex-col relative z-20' : 'max-w-7xl mx-auto space-y-8 relative z-20'}`}>
             {activeTab === 'dashboard' && <Dashboard userRole={userRole} />}
+            {activeTab === 'chat' && <CrmChats userRole={userRole} currentManagerId={currentManagerId} />}
             {activeTab === 'leads' && <Leads />}
             {activeTab === 'finances' && <Finances userRole={userRole} />}
             {activeTab === 'agencies' && <Agencies />}
@@ -191,21 +197,47 @@ function StatCard({ title, value, trend }: any) {
 
 function Leads() {
   const MOCK_LEADS = [
-    { id: 'LD-8012', source: 'SS.ge', contact: 'Георгий +995 555...', status: 'Новый', manager: 'Свободно' },
-    { id: 'LD-8013', source: 'MyHome', contact: 'Нина +995 599...', status: 'В работе', manager: 'Анна С.' },
-    { id: 'LD-8014', source: 'SS.ge', contact: 'Давид +995 577...', status: 'Тестирует', manager: 'Алекс М.' },
-    { id: 'LD-8015', source: 'Realting', contact: 'Елена +995 514...', status: 'Оплатил', manager: 'Свободно' },
+    { id: 'LD-8012', source: 'SS.ge', contact: 'Георгий +995 555...', status: 'Новый', manager: 'Свободно', phone: '995555123456' },
+    { id: 'LD-8013', source: 'MyHome', contact: 'Нина +995 599...', status: 'В работе', manager: 'Анна С.', phone: '995599876543' },
+    { id: 'LD-8014', source: 'SS.ge', contact: 'Давид @david_gv', status: 'Тестирует', manager: 'Алекс М.', phone: '@david_gv' },
+    { id: 'LD-8016', source: 'Korter', contact: 'Ираклий +995 555...', status: 'Второе касание', manager: 'Алекс М.', phone: '995555121212' },
+    { id: 'LD-8015', source: 'Realting', contact: 'Елена +995 514...', status: 'Оплатил', manager: 'Свободно', phone: '995514112233' },
   ];
+
+  const [startingChat, setStartingChat] = useState<string | null>(null);
+  const [startMessage, setStartMessage] = useState<string>('Здравствуйте! Заметил, что вы публикуете объекты. Хочу предложить Karty — сервис автоматической публикации на SS.ge, MyHome и Korter за 1 клик. Экономия времени до 5 часов в неделю!');
+  const [activeFilter, setActiveFilter] = useState<string>('Все лиды');
+
+  const handleStartChat = (lead: any, platform: 'whatsapp' | 'telegram') => {
+    console.log(`Starting chat with ${lead.contact} via ${platform}`);
+    setStartingChat(null);
+    // Real logic: create chat in Firebase, redirect to chat tab
+  };
+
+  const FILTERS = ['Все лиды', 'Новый', 'В работе', 'Тестирует', 'Второе касание', 'Оплатил'];
+
+  const filteredLeads = activeFilter === 'Все лиды' 
+    ? MOCK_LEADS 
+    : MOCK_LEADS.filter(lead => lead.status === activeFilter);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button className="px-4 py-2 bg-[#ffffff] dark:bg-[#0F0F0F] border border-[#e5edf5] dark:border-[#1A1A1A] rounded-xl text-[13px] font-semibold text-[#061b31] dark:text-white flex items-center gap-2 hover:bg-[#f6f9fc] dark:hover:bg-white/[0.03] transition-colors shadow-sm">
-            <Filter size={14} /> Фильтры
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+        {FILTERS.map(filter => (
+          <button
+            key={filter}
+            onClick={() => setActiveFilter(filter)}
+            className={`px-4 py-2 rounded-xl text-[13px] font-semibold whitespace-nowrap transition-all ${
+              activeFilter === filter 
+                ? 'bg-[#533afd] text-white shadow-md shadow-[#533afd]/20' 
+                : 'bg-[#ffffff] dark:bg-[#0F0F0F] border border-[#e5edf5] dark:border-[#1A1A1A] text-[#061b31] dark:text-gray-300 hover:bg-[#f6f9fc] dark:hover:bg-white/[0.03]'
+            }`}
+          >
+            {filter}
           </button>
-        </div>
-        <button className="px-4 py-2 bg-[#533afd] text-white rounded-xl text-[13px] font-semibold hover:bg-[#432AEE] transition-all shadow-md shadow-[#533afd]/20">
+        ))}
+        <div className="flex-1"></div>
+        <button className="px-4 py-2 shrink-0 bg-[#ffffff] dark:bg-[#0F0F0F] border border-[#e5edf5] dark:border-[#1A1A1A] rounded-xl text-[13px] font-semibold text-[#061b31] dark:text-white flex items-center gap-2 hover:bg-[#f6f9fc] dark:hover:bg-white/[0.03] transition-colors shadow-sm">
           + Добавить лид
         </button>
       </div>
@@ -222,43 +254,79 @@ function Leads() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e5edf5] dark:divide-[#1A1A1A] text-[14px]">
-            {MOCK_LEADS.map((lead) => (
-              <tr key={lead.id} className="hover:bg-[#f6f9fc] dark:hover:bg-white/[0.01] transition-colors group">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gray-100 dark:bg-white/5 rounded-lg flex items-center justify-center font-bold text-xs">
-                      {lead.source === 'SS.ge' ? 'SS' : lead.source === 'MyHome' ? 'MH' : 'RE'}
+            {filteredLeads.map((lead) => (
+              <React.Fragment key={lead.id}>
+                <tr className="hover:bg-[#f6f9fc] dark:hover:bg-white/[0.01] transition-colors group relative">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gray-100 dark:bg-white/5 rounded-lg flex items-center justify-center font-bold text-xs">
+                        {lead.source === 'SS.ge' ? 'SS' : lead.source === 'MyHome' ? 'MH' : lead.source === 'Korter' ? 'KO' : 'RE'}
+                      </div>
+                      <div className="font-mono text-[13px] text-[#64748d]">{lead.id}</div>
                     </div>
-                    <div className="font-mono text-[13px] text-[#64748d]">{lead.id}</div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 font-medium text-[#061b31] dark:text-white">{lead.contact}</td>
-                <td className="px-6 py-4">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${
-                    lead.status === 'Новый' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400' :
-                    lead.status === 'В работе' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
-                    lead.status === 'Тестирует' ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400' :
-                    'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'
-                  }`}>
-                    {lead.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-[#64748d]">{lead.manager}</td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                    <button className="px-3 py-1.5 bg-[#f6f9fc] dark:bg-white/[0.05] hover:bg-[#533afd] hover:text-white text-[#061b31] dark:text-white rounded-lg text-[12px] font-semibold transition-colors border border-[#e5edf5] dark:border-white/10 hover:border-[#533afd]">
-                      Взять
-                    </button>
-                    <button className="px-3 py-1.5 bg-green-500/10 hover:bg-green-500 hover:text-white text-green-600 dark:text-green-400 rounded-lg text-[12px] font-semibold transition-colors">
-                      WA
-                    </button>
-                    <button className="p-1.5 text-[#64748d] hover:text-[#061b31] dark:hover:text-white transition-colors">
-                      <MoreVertical size={16} />
-                    </button>
-                  </div>
+                  </td>
+                  <td className="px-6 py-4 font-medium text-[#061b31] dark:text-white">{lead.contact}</td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${
+                      lead.status === 'Новый' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400' :
+                      lead.status === 'В работе' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
+                      lead.status === 'Тестирует' ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400' :
+                      lead.status === 'Второе касание' ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400' :
+                      'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'
+                    }`}>
+                      {lead.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-[#64748d]">{lead.manager}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => setStartingChat(startingChat === lead.id ? null : lead.id)}
+                        className="px-3 py-1.5 bg-[#f6f9fc] dark:bg-white/[0.05] hover:bg-[#533afd] hover:text-white text-[#061b31] dark:text-white rounded-lg text-[12px] font-semibold transition-colors border border-[#e5edf5] dark:border-white/10 hover:border-[#533afd]">
+                        {startingChat === lead.id ? 'Отмена' : 'Написать'}
+                      </button>
+                      <button className="p-1.5 text-[#64748d] hover:text-[#061b31] dark:hover:text-white transition-colors">
+                        <MoreVertical size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {startingChat === lead.id && (
+                  <tr className="bg-[#f6f9fc]/50 dark:bg-white/[0.01]">
+                    <td colSpan={5} className="px-6 py-4">
+                      <div className="bg-white dark:bg-[#1A1A1A] border border-[#e5edf5] dark:border-white/5 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                        <label className="text-[12px] font-bold text-[#64748d] uppercase">Первое сообщение клиенту</label>
+                        <textarea 
+                          value={startMessage}
+                          onChange={(e) => setStartMessage(e.target.value)}
+                          className="w-full h-20 p-3 bg-[#f6f9fc] dark:bg-[#0F0F0F] rounded-lg border border-[#e5edf5] dark:border-white/10 text-[13px] outline-none focus:border-[#533afd] resize-none"
+                        />
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => handleStartChat(lead, 'whatsapp')}
+                            className="bg-[#25D366] hover:bg-[#20bd5a] text-white px-4 py-2 rounded-lg text-[13px] font-bold flex items-center gap-2 transition-colors">
+                            Отправить в WhatsApp
+                          </button>
+                          <button 
+                            onClick={() => handleStartChat(lead, 'telegram')}
+                            className="bg-[#0088cc] hover:bg-[#0077b3] text-white px-4 py-2 rounded-lg text-[13px] font-bold flex items-center gap-2 transition-colors">
+                            Отправить в Telegram
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+            
+            {filteredLeads.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-6 py-12 text-center text-[#64748d]">
+                  Нет лидов с таким статусом
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
@@ -357,18 +425,62 @@ function Agencies() {
 }
 
 function SettingsPanel() {
+  const [managers, setManagers] = useState([
+    { id: 'mgr-123', name: 'Алексей М.', login: 'alex', active: true },
+    { id: 'mgr-456', name: 'Анна С.', login: 'anna', active: true }
+  ]);
+  const [newManager, setNewManager] = useState({ name: '', login: '', password: '' });
+
+  const handleAddManager = () => {
+    if (!newManager.name || !newManager.login || !newManager.password) return;
+    setManagers([...managers, { id: Date.now().toString(), name: newManager.name, login: newManager.login, active: true }]);
+    setNewManager({ name: '', login: '', password: '' });
+  };
+
+  const handleDelete = (id: string) => {
+    setManagers(managers.filter(m => m.id !== id));
+  };
+
   return (
     <div className="max-w-3xl space-y-8">
+      {/* Менеджеры CRM */}
       <div className="bg-[#ffffff] dark:bg-[#0F0F0F] border border-[#e5edf5] dark:border-[#1A1A1A] rounded-2xl p-6 shadow-sm">
-        <h3 className="text-[16px] font-bold mb-6">Настройки бота и цен</h3>
+        <h3 className="text-[16px] font-bold mb-6 text-[#061b31] dark:text-white">Управление менеджерами</h3>
+        <div className="space-y-4 mb-6 relative">
+          <div className="flex items-center gap-3">
+             <input type="text" placeholder="Имя менеджера" value={newManager.name} onChange={e => setNewManager({...newManager, name: e.target.value})} className="flex-1 px-4 py-2 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-xl font-medium text-[13px] focus:outline-none focus:border-[#533afd] dark:text-white" />
+             <input type="text" placeholder="Логин" value={newManager.login} onChange={e => setNewManager({...newManager, login: e.target.value})} className="flex-1 px-4 py-2 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-xl font-medium text-[13px] focus:outline-none focus:border-[#533afd] dark:text-white" />
+             <input type="password" placeholder="Пароль" value={newManager.password} onChange={e => setNewManager({...newManager, password: e.target.value})} className="flex-1 px-4 py-2 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-xl font-medium text-[13px] focus:outline-none focus:border-[#533afd] dark:text-white" />
+             <button onClick={handleAddManager} className="px-5 py-2 min-w-[120px] bg-[#533afd] text-white rounded-xl text-[13px] font-bold hover:bg-[#432AEE] transition-all">Добавить</button>
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          {managers.map(mgr => (
+            <div key={mgr.id} className="flex items-center justify-between p-4 bg-[#f6f9fc] dark:bg-white/[0.02] rounded-xl border border-[#e5edf5] dark:border-white/5">
+              <div>
+                <div className="font-bold text-[14px] text-[#061b31] dark:text-white">{mgr.name}</div>
+                <div className="text-[12px] text-[#64748d] font-mono mt-0.5">@{mgr.login}</div>
+              </div>
+              <button onClick={() => handleDelete(mgr.id)} className="px-3 py-1.5 bg-[#e71d36]/10 text-[#e71d36] rounded-lg text-[12px] font-bold hover:bg-[#e71d36]/20 transition-colors">
+                Удалить доступ
+              </button>
+            </div>
+          ))}
+          {managers.length === 0 && <div className="text-[13px] text-[#64748d]">Нет добавленных менеджеров</div>}
+        </div>
+      </div>
+
+      <div className="bg-[#ffffff] dark:bg-[#0F0F0F] border border-[#e5edf5] dark:border-[#1A1A1A] rounded-2xl p-6 shadow-sm">
+        <h3 className="text-[16px] font-bold mb-6 text-[#061b31] dark:text-white">Настройки бота и цен</h3>
         <div className="space-y-4">
           <div>
             <label className="block text-[13px] font-bold text-[#64748d] mb-1.5 uppercase tracking-wider">Цена базовой подписки ($)</label>
-            <input type="number" defaultValue={49} className="w-full px-4 py-2.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-xl font-medium focus:outline-none focus:border-[#533afd]" />
+            <input type="number" defaultValue={49} className="w-full px-4 py-2.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-xl font-medium focus:outline-none focus:border-[#533afd] dark:text-white" />
           </div>
           <div>
             <label className="block text-[13px] font-bold text-[#64748d] mb-1.5 uppercase tracking-wider">Процент менеджера (%)</label>
-            <input type="number" defaultValue={20} className="w-full px-4 py-2.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-xl font-medium focus:outline-none focus:border-[#533afd]" />
+            <input type="number" defaultValue={20} className="w-full px-4 py-2.5 bg-[#f6f9fc] dark:bg-white/[0.03] border border-[#e5edf5] dark:border-white/10 rounded-xl font-medium focus:outline-none focus:border-[#533afd] dark:text-white" />
           </div>
           <button className="px-5 py-2.5 bg-[#533afd] text-white rounded-xl text-[14px] font-bold hover:bg-[#432AEE] transition-all">
             Сохранить тарифы
@@ -377,24 +489,20 @@ function SettingsPanel() {
       </div>
       
       <div className="bg-[#ffffff] dark:bg-[#0F0F0F] border border-[#e5edf5] dark:border-[#1A1A1A] rounded-2xl p-6 shadow-sm">
-        <h3 className="text-[16px] font-bold mb-6">Интеграции</h3>
+        <h3 className="text-[16px] font-bold mb-6 text-[#061b31] dark:text-white">Чаты: Уведомления Telegram</h3>
         <div className="space-y-4">
           <div className="flex items-center justify-between p-4 border border-[#e5edf5] dark:border-white/10 rounded-xl bg-green-500/5">
             <div>
-              <div className="font-bold text-[14px]">Cryptomus API</div>
+              <div className="font-bold text-[14px] text-[#061b31] dark:text-white">Telegram Notifier Bot Token</div>
               <div className="text-[12px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
-                Подключено
+                Подключено (Active)
               </div>
             </div>
             <button className="text-[13px] font-bold text-[#64748d] hover:text-[#061b31] dark:hover:text-white">Изменить</button>
           </div>
-          <div className="flex items-center justify-between p-4 border border-[#e5edf5] dark:border-white/10 rounded-xl bg-green-500/5">
-            <div>
-              <div className="font-bold text-[14px]">Telegram Bot Token</div>
-              <div className="text-[12px] text-green-600 dark:text-green-400 mt-1">Подключено (Active)</div>
-            </div>
-            <button className="text-[13px] font-bold text-[#64748d] hover:text-[#061b31] dark:hover:text-white">Изменить</button>
-          </div>
+          <p className="text-[12px] text-[#64748d]">
+            *Система автоматически будет пушить менеджеров в этот бот, если они не прочитали сообщение клиента в течение 2 минут.
+          </p>
         </div>
       </div>
     </div>
