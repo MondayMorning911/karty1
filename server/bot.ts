@@ -33,6 +33,10 @@ export function startBot() {
     request: requestOpts
   });
 
+  bot.on('polling_error', (error) => {
+    console.error(`[Telegram Bot Polling Error]: ${error.message}`);
+  });
+
   // Fallback app URL if process.env.APP_URL is not set (you'll set it in production)
   // For AI Studio, it will be injected.
   const appUrl = process.env.APP_URL || "https://karty-app.vercel.app";

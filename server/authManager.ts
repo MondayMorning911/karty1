@@ -28,12 +28,10 @@ export class AuthManager {
       const page = await context.newPage();
       const sessionId = 'browserless-' + Math.random().toString(36).substring(7);
       
-      // Блокируем лишние ресурсы для ускорения загрузки
+      // Блокируем ЛИШЬ аналитику, без image/fonts (из-за Cloudflare/Captcha)
       await page.route('**/*', (route) => {
         const url = route.request().url();
-        const type = route.request().resourceType();
-        if (['image', 'font', 'media', 'other'].includes(type) || 
-            url.includes('google-analytics') || url.includes('facebook') || url.includes('hotjar.com') || url.includes('googletagmanager.com')) {
+        if (url.includes('google-analytics') || url.includes('facebook') || url.includes('hotjar.com') || url.includes('googletagmanager.com')) {
           route.abort().catch(() => {});
         } else {
           route.continue().catch(() => {});
@@ -42,7 +40,7 @@ export class AuthManager {
 
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
       const fillWithDelay = async (locator: string, text: string) => {
-        await page.click(locator);
+        await page.click(locator, { timeout: 10000 });
         await delay(Math.random() * 200 + 200);
         await page.fill(locator, text);
       };
@@ -50,27 +48,28 @@ export class AuthManager {
       console.log(`[AuthManager] Navigating to ${targetUrl}`);
       await page.goto(targetUrl, { waitUntil: 'commit', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
 
-      // Handle specific platform logins
+      // Обработка логина для каждой платформы
       if (platform === 'ssge') {
-        // ss.ge: fill login, wait for password, fill password, click login
-        await page.waitForSelector('input.input[name="userName"]', { timeout: 10000 });
-        await fillWithDelay('input.input[name="userName"]', loginStr);
+        const userSelector = 'input.input, input[name="userName"]';
+        await page.waitForSelector(userSelector, { timeout: 15000 });
+        await fillWithDelay(userSelector, loginStr);
         await delay(Math.random() * 500 + 200);
-        await fillWithDelay('input[name="password"]', passwordStr);
+        
+        const passSelector = 'input[type="password"], input[name="password"]';
+        await fillWithDelay(passSelector, passwordStr);
         await delay(Math.random() * 1000 + 500);
+        
         await page.hover('button.primary-btn');
         await delay(Math.random() * 300 + 100);
         await page.click('button.primary-btn');
         
-        // Wait for successful redirect back to home.ss.ge
-        await page.waitForFunction(() => window.location.hostname.includes('ss.ge') && !window.location.href.includes('login'), { timeout: 15000 }).catch(e => console.warn('ssge waitForFunction:', e.message));
-        await delay(2000);
+        await page.waitForFunction(() => window.location.hostname.includes('ss.ge') && !window.location.href.includes('login'), { timeout: 20000 }).catch(e => console.warn('ssge redirect warning:', e.message));
+        await delay(3000);
       } else if (platform === 'myhome') {
-        // auth.tnet.ge
-        await page.waitForSelector('#_r_m_', { timeout: 10000 });
+        await page.waitForSelector('#_r_m_', { timeout: 15000 });
         await page.click('#_r_m_');
         await delay(100);
-        await page.locator('#_r_m_').pressSequentially(loginStr, { delay: 150 });
+        await page.locator('#_r_m_').fill(loginStr);
         await delay(Math.random() * 500 + 200);
         
         await page.click('#_r_n_');
@@ -78,31 +77,40 @@ export class AuthManager {
         await page.fill('#_r_n_', passwordStr);
         
         await delay(Math.random() * 1000 + 500);
-        await page.hover('button.bg-blue-100.hover\\:bg-blue-110');
-        await delay(Math.random() * 300 + 100);
-        await page.click('button.bg-blue-100.hover\\:bg-blue-110');
+        
+        const submitBtn = page.locator('button:has-text("Войти"), button.bg-blue-100').first();
+        if (await submitBtn.isVisible().catch(() => false)) {
+            await submitBtn.hover();
+            await delay(Math.random() * 300 + 100);
+            await submitBtn.click({ force: true });
+        } else {
+            console.warn('[AuthManager] myhome "Войти" button not found explicitly. Trying Enter key.');
+            await page.locator('#_r_n_').press('Enter');
+        }
 
-        // wait for successful login redirect
         await Promise.race([
             page.waitForURL(/myhome\.ge/, { timeout: 30000 }),
             page.waitForSelector('a[href*="logout"], .user-profile', { timeout: 30000 })
         ]).catch(e => console.warn('myhome login wait warning:', e.message));
-        await delay(2000);
+        await delay(3000);
       } else if (platform === 'realting') {
-        await page.waitForSelector('#loginform-username', { timeout: 10000 });
-        await fillWithDelay('#loginform-username', loginStr);
-        await delay(Math.random() * 500 + 200);
-        await fillWithDelay('#loginform-password', passwordStr);
+        const userSelector = '#loginform-username';
+        const passSelector = '#loginform-password';
+        const submitSelector = '#login-form-submit, button:has-text("Войти")';
         
-        // click submit (find submit button)
+        await page.waitForSelector(userSelector, { timeout: 15000 });
+        await fillWithDelay(userSelector, loginStr);
+        await delay(Math.random() * 500 + 200);
+        await fillWithDelay(passSelector, passwordStr);
+        
         await delay(Math.random() * 1000 + 500);
-        await page.hover('#login-form-submit');
+        const submitBtn = page.locator(submitSelector).first();
+        await submitBtn.hover();
         await delay(Math.random() * 300 + 100);
-        await page.click('#login-form-submit');
+        await submitBtn.click({ force: true });
 
-        // wait for successful login redirect (url changes from /login)
-        await page.waitForFunction(() => !window.location.href.includes('/login'), { timeout: 15000 });
-        await delay(2000); // give it a moment to fully set cookies after redirect
+        await page.waitForFunction(() => !window.location.href.includes('/login'), { timeout: 20000 });
+        await delay(3000);
       }
 
       // Collect storage and cookies
