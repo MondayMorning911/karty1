@@ -108,7 +108,22 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       // Check for auth button to confirm if cookies failed
       const authBtn = page.locator('a[href*="login"], a:has-text("Войти"), a:has-text("ავტორიზაცია"), a:has-text("Авторизация"), button:has-text("Войти"), button:has-text("Авторизация")').first();
       if (await authBtn.isVisible().catch(()=>false)) {
-          throw new Error('Сессия недействительна. Найдена кнопка авторизации (куки не сработали).');
+          console.log(`[SSgePublisher] Auth button found. Attempting to click it...`);
+          await authBtn.click({ force: true }).catch(()=>{});
+          await delay(5000);
+
+          const afterClickUrl = await page.url();
+          if (afterClickUrl.includes('account.ss.ge/ka/account/login') || afterClickUrl.includes('login') || afterClickUrl.includes('account.ss.ge')) {
+              throw new Error('Сессия недействительна. Требуется повторная авторизация (перенаправлено на логин).');
+          }
+
+          if (await authBtn.isVisible().catch(()=>false)) {
+              throw new Error('Сессия недействительна. Кнопка авторизации все еще видна (куки не сработали).');
+          }
+
+          console.log(`[SSgePublisher] Seems auto-logged in! Navigating to create page...`);
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{});
+          await delay(3000);
       }
 
       // 4. Заполняем форму
