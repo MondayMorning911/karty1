@@ -41,11 +41,11 @@ interface PageProps {
 
 export function useUserSessions(uid: string | null) {
   const [sessions, setSessions] = useState<Record<string, any>>({});
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   useEffect(() => {
     if (!uid) return;
     
-    // Initial fetch
     const fetchSessions = async () => {
       const { data, error } = await supabase
         .from('platform_sessions')
@@ -55,29 +55,16 @@ export function useUserSessions(uid: string | null) {
       if (!error && data) {
          const sessionDict: Record<string, any> = {};
          data.forEach(row => {
-           sessionDict[row.platform] = { state: row.state, createdAt: row.created_at };
+           sessionDict[row.platform] = row;
          });
          setSessions(sessionDict);
       }
     };
+    
     fetchSessions();
+  }, [uid, refreshTrigger]);
 
-    const channel = supabase.channel(`public:platform_sessions:user_id=eq.${uid}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'platform_sessions', filter: `user_id=eq.${uid}` },
-        () => {
-          fetchSessions();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [uid]);
-
-  return sessions;
+  return { sessions, refresh: () => setRefreshTrigger(t => t + 1) };
 }
 
 export function MiniApp({ theme, toggleTheme }: PageProps) {
@@ -188,7 +175,7 @@ function CreateTab({
 
   const [activeEnhance, setActiveEnhance] = useState<string | null>(null);
 
-  const sessions = useUserSessions(uid);
+  const { sessions } = useUserSessions(uid);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({});
 
   // Auto-select platforms that are connected, if not already specifically deselected
@@ -639,7 +626,7 @@ function CreateTab({
 }
 
 function PlatformsTab({ uid }: { uid: string | null }) {
-  const sessions = useUserSessions(uid);
+  const { sessions, refresh } = useUserSessions(uid);
   const currentUserId = uid || 'anonymous_user';
 
   const [activeSiteAuth, setActiveSiteAuth] = useState<string | null>(null);
@@ -670,7 +657,7 @@ function PlatformsTab({ uid }: { uid: string | null }) {
         } catch (e) {}
         throw new Error(errorMsg);
       } else {
-        window.location.reload();
+        refresh(); // Update the local state instead of reloading
       }
     } catch (e: any) {
       alert('Ошибка: ' + e.message);

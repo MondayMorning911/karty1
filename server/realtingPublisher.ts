@@ -97,6 +97,11 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       console.log(`[RealtingPublisher] Finished navigating.`);
       await delay(2000);
 
+      const currentUrl = await page.url();
+      if (currentUrl.includes('login')) {
+          throw new Error('Сессия недействительна. Требуется повторная авторизация (перенаправлено на логин)');
+      }
+
       // 4. Заполняем форму
 
       // Тип сделки

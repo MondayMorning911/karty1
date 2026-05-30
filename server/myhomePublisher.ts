@@ -97,6 +97,11 @@ export async function publishMyhomeAsync(userId: string, objectId: string, text:
       }
       await delay(3000);
 
+      const currentUrl = await page.url();
+      if (currentUrl.includes('login') || currentUrl.includes('auth.tnet.ge')) {
+          throw new Error('Сессия недействительна. Требуется повторная авторизация (перенаправлено на логин)');
+      }
+
       const clickWithSpanText = async (text: string) => {
           if (!text) return;
           const el = page.locator(`span:has-text("${text}"), label:has-text("${text}")`).first();

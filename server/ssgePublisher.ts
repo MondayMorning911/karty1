@@ -99,6 +99,11 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       console.log(`[SSgePublisher] Finished navigating.`);
       await delay(3000);
 
+      const currentUrl = await page.url();
+      if (currentUrl.includes('login') || currentUrl.includes('account.ss.ge')) {
+          throw new Error('Сессия недействительна. Требуется повторная авторизация (перенаправлено на логин)');
+      }
+
       // 4. Заполняем форму
 
       // Main type
