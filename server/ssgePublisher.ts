@@ -91,14 +91,14 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       } catch (e: any) {
           if (e.message && e.message.includes('ERR_ABORTED')) {
-              await delay(2000);
+              await delay(600);
               await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
           } else {
               throw e;
           }
       }
       console.log(`[SSgePublisher] Finished navigating.`);
-      await delay(3000);
+      await delay(1000);
 
       const currentUrl = await page.url();
       if (currentUrl.includes('login') || currentUrl.includes('account.ss.ge')) {
@@ -121,16 +121,23 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
               throw new Error('Сессия недействительна. Кнопка авторизации все еще видна (куки не сработали).');
           }
 
-          console.log(`[SSgePublisher] Seems auto-logged in! Navigating to create page...`);
-          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{});
-          await delay(3000);
+          console.log(`[SSgePublisher] Seems auto-logged in! Trying to navigate to create page from UI...`);
+          const createNavBtn = page.locator('a[href*="create"], button:has-text("Разместить объявление")').first();
+          if (await createNavBtn.isVisible().catch(()=>false)) {
+              await createNavBtn.click({ force: true }).catch(()=>{});
+              await delay(2000);
+          } else {
+              await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{});
+              await delay(2000);
+          }
       }
 
+      console.log(`[SSgePublisher] Checking for draft popup...`);
       const draftPopupBtn = page.locator('button:has-text("Добавить новое заявление"), button:has-text("ახალი განცხადების დამატება")').first();
-      if (await draftPopupBtn.waitFor({ state: 'visible', timeout: 3000 }).catch(() => false)) {
+      if (await draftPopupBtn.waitFor({ state: 'visible', timeout: 8000 }).catch(() => false)) {
           console.log(`[SSgePublisher] Found draft popup. Clicking "Добавить новое заявление"...`);
           await draftPopupBtn.click({ force: true }).catch(() => {});
-          await delay(2000);
+          await delay(1000);
       }
 
       // 4. Заполняем форму
@@ -138,7 +145,7 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       const fillWithRetry = async (label: string, action: () => Promise<boolean>) => {
           for (let i = 0; i < 3; i++) {
               if (await action()) return true;
-              await delay(1000);
+              await delay(300);
           }
           return false;
       };
@@ -148,7 +155,7 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
           const typeBtn = page.locator(`div:has-text("${parsed.mainType}")`).last();
           if (await typeBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await typeBtn.click({ force: true }).catch(()=>{});
-              await delay(1000);
+              await delay(300);
           }
       }
 
@@ -156,7 +163,7 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
           const dealBtn = page.locator(`div:has-text("${parsed.dealType}")`).last();
           if (await dealBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await dealBtn.click({ force: true }).catch(()=>{});
-              await delay(1000);
+              await delay(300);
           }
       }
 
@@ -165,7 +172,7 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
           const nextBtn = page.locator('button.btn-next, button:has-text("Дальше"), button:has-text("Следующий")').last();
           if (await nextBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await nextBtn.click({ force: true });
-              await delay(2000);
+              await delay(600);
               return true;
           }
           return false;
@@ -180,9 +187,9 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
               await inputContainer.click();
               await delay(500);
               await page.keyboard.type(parsed.city, { delay: 100 });
-              await delay(2000); // wait for suggestion
+              await delay(600); // wait for suggestion
               await page.keyboard.press('Enter');
-              await delay(1000);
+              await delay(300);
           }
       }
 
@@ -315,9 +322,9 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       for (const btn of publishBtns) {
           if (await btn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await btn.scrollIntoViewIfNeeded().catch(()=>{});
-              await delay(1000);
+              await delay(300);
               await btn.click({ force: true });
-              await delay(3000);
+              await delay(1000);
               break;
           }
       }
