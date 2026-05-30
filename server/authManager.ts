@@ -16,13 +16,16 @@ export class AuthManager {
     if (platform === 'realting') targetUrl = 'https://realting.com/ru/login';
 
     const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
-    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&timeout=600000`;
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&headless=false&timeout=600000&--disable-blink-features=AutomationControlled`;
     console.log(`[AuthManager] Creating self-hosted Browserless session for ${platform}...`);
     const browser = await chromium.connectOverCDP(wsUrl, { timeout: 0 });
     
     try {
       console.log(`[AuthManager] Connected to Browserless context for ${platform}...`);
-      const context = browser.contexts()[0] || await browser.newContext();
+      const context = browser.contexts()[0] || await browser.newContext({
+        viewport: { width: 1280, height: 1024 },
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      });
       
       console.log(`[AuthManager] Opening new page for ${platform}...`);
       const page = await context.newPage();
@@ -45,8 +48,33 @@ export class AuthManager {
         await page.locator(locator).pressSequentially(text, { delay: 100 });
       };
 
+      const handleTurnstile = async () => {
+        try {
+          const cfFrame = page.frameLocator('iframe[src*="challenges.cloudflare.com"]');
+          if (await cfFrame.locator('body').waitFor({ state: 'attached', timeout: 5000 }).catch(() => false)) {
+            console.log(`[AuthManager] Cloudflare Turnstile detected. Attempting to click...`);
+            await delay(2000);
+            
+            const checkbox = cfFrame.locator('input[type="checkbox"], .ctp-checkbox-label, .mark').first();
+            if (await checkbox.waitFor({ state: 'visible', timeout: 3000 }).catch(()=>false)) {
+              await checkbox.click({ force: true });
+            } else {
+              const frameEl = page.locator('iframe[src*="challenges.cloudflare.com"]').first();
+              const box = await frameEl.boundingBox();
+              if (box) {
+                await page.mouse.click(box.x + box.width / 2 + (Math.random() * 10 - 5), box.y + box.height / 2 + (Math.random() * 10 - 5));
+              }
+            }
+            console.log(`[AuthManager] Clicked Cloudflare. Waiting for resolution...`);
+            await delay(5000);
+          }
+        } catch(e) {}
+      };
+
       console.log(`[AuthManager] Navigating to ${targetUrl}`);
       await page.goto(targetUrl, { waitUntil: 'commit', timeout: 30000 }).catch(e => console.warn('goto timeout:', e.message));
+      
+      await handleTurnstile();
 
       // Обработка логина для каждой платформы
       if (platform === 'ssge') {
@@ -63,7 +91,7 @@ export class AuthManager {
         await delay(Math.random() * 300 + 100);
         await page.click('button.primary-btn');
         
-        await page.waitForFunction(() => window.location.hostname.includes('ss.ge') && !window.location.href.includes('login'), { timeout: 20000 }).catch(e => console.warn('ssge redirect warning:', e.message));
+        await page.waitForFunction(() => window.location.hostname.includes('ss.ge') && !window.location.href.includes('login'), { timeout: 60000 }).catch(e => console.warn('ssge redirect warning:', e.message));
         await delay(3000);
       } else if (platform === 'myhome') {
         await page.waitForSelector('#_r_m_', { timeout: 15000 });
@@ -79,7 +107,7 @@ export class AuthManager {
         await delay(Math.random() * 1000 + 500);
         
         const submitBtn = page.locator('button.bg-blue-100').first();
-        if (await submitBtn.isVisible().catch(() => false)) {
+        if (await submitBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
             await submitBtn.hover();
             await delay(Math.random() * 300 + 100);
             await submitBtn.click({ force: true });
@@ -89,8 +117,8 @@ export class AuthManager {
         }
 
         await Promise.race([
-            page.waitForURL(/myhome\.ge/, { timeout: 30000 }),
-            page.waitForSelector('a[href*="logout"], .user-profile', { timeout: 30000 })
+            page.waitForURL(/myhome\.ge/, { timeout: 60000 }),
+            page.waitForSelector('a[href*="logout"], .user-profile', { timeout: 60000 })
         ]).catch(e => console.warn('myhome login wait warning:', e.message));
         await delay(3000);
       } else if (platform === 'realting') {
@@ -109,7 +137,7 @@ export class AuthManager {
         await delay(Math.random() * 300 + 100);
         await submitBtn.click({ force: true });
 
-        await page.waitForFunction(() => !window.location.href.includes('/login'), { timeout: 20000 });
+        await page.waitForFunction(() => !window.location.href.includes('/login'), { timeout: 60000 });
         await delay(3000);
       }
 

@@ -62,7 +62,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
     
     // 3. Запускаем свой Browserless браузер
     const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
-    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&timeout=600000`;
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&headless=false&timeout=600000&--disable-blink-features=AutomationControlled`;
     
     console.log('🚀 Подключаемся к self-hosted Browserless (CDP) для Realting...');
     const browser = await chromium.connectOverCDP(wsUrl, { timeout: 0 });
@@ -75,7 +75,8 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
         permissions: ['geolocation'],
         geolocation: { latitude: 41.6410, longitude: 41.6310 },
         timezoneId: 'Asia/Tbilisi',
-        viewport: { width: 1280, height: 1024 }
+        viewport: { width: 1280, height: 1024 },
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       });
       const page = await context.newPage();
       page.setDefaultTimeout(60000);
@@ -108,7 +109,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       if (parsed.dealType) {
         let dealText = parsed.dealType;
         const dealBtn = page.locator('span', { hasText: new RegExp(`^\${dealText}\$`, 'i') }).first();
-        if (await dealBtn.isVisible().catch(() => false)) {
+        if (await dealBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
             await dealBtn.click({ force: true }).catch(() => {});
             await delay(1000);
         }
@@ -117,7 +118,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       // Main type
       if (parsed.mainType) {
           const mainTypeSelect = page.locator('select.maintypeInput.form-control').first();
-          if (await mainTypeSelect.isVisible().catch(()=>false)) {
+          if (await mainTypeSelect.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               // we can select by label
               await mainTypeSelect.selectOption({ label: parsed.mainType }).catch(() => {});
               await delay(1000);
@@ -127,7 +128,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       // Sub type
       if (parsed.subType) {
           const typeSelect = page.locator('#estate-type_id').first();
-          if (await typeSelect.isVisible().catch(()=>false)) {
+          if (await typeSelect.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await typeSelect.selectOption({ label: parsed.subType }).catch(() => {});
               await delay(1000);
           }
@@ -136,14 +137,22 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       // Country and Address (Select2)
       if (parsed.country) {
           const countryContainer = page.locator('#select2-estate-country_code-container').first();
-          if (await countryContainer.isVisible().catch(()=>false)) {
+          if (await countryContainer.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await countryContainer.click({ force: true }).catch(()=>{});
               await delay(1000);
               const searchInput = page.locator('input.select2-search__field').first();
-              if (await searchInput.isVisible().catch(()=>false)) {
-                  await searchInput.fill(parsed.country);
-                  await delay(1000);
-                  await page.keyboard.press('Enter');
+              if (await searchInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
+                  await searchInput.fill('');
+                  await searchInput.type(parsed.country, { delay: 100 });
+                  await delay(2000); // wait for suggestion
+                  
+                  // Try to click the suggestion
+                  const option = page.locator('li.select2-results__option', { hasText: parsed.country }).first();
+                  if (await option.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
+                      await option.click({ force: true });
+                  } else {
+                      await page.keyboard.press('Enter');
+                  }
                   await delay(1000);
               }
           }
@@ -153,16 +162,22 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
           // there could be multiple search fields, but usually the active one appears
           // we can click region or city if there are standard dropdowns
           const regionPlaceholder = page.locator('span.select2-selection__placeholder', { hasText: 'Начните вводить адрес' }).first();
-          if (await regionPlaceholder.isVisible().catch(()=>false)) {
+          if (await regionPlaceholder.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await regionPlaceholder.click({ force: true }).catch(()=>{});
               await delay(1000);
               const searchInputs = page.locator('input.select2-search__field');
               // use the visible one
               for (let i = 0; i < await searchInputs.count(); i++) {
                  if (await searchInputs.nth(i).isVisible()) {
-                     await searchInputs.nth(i).fill(parsed.address);
-                     await delay(2000); // wait for suggestions
-                     await page.keyboard.press('Enter');
+                     await searchInputs.nth(i).fill('');
+                     await searchInputs.nth(i).type(parsed.address, { delay: 100 });
+                     await delay(3000); // wait for suggestions
+                     const option = page.locator('li.select2-results__option').first();
+                     if (await option.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
+                         await option.click({ force: true });
+                     } else {
+                         await page.keyboard.press('Enter');
+                     }
                      await delay(1000);
                      break;
                  }
@@ -173,7 +188,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       // Price
       if (parsed.price) {
           const priceInput = page.locator('#estate-price').first();
-          if (await priceInput.isVisible().catch(()=>false)) {
+          if (await priceInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await priceInput.fill('');
               await priceInput.type(String(parsed.price), { delay: 100 });
               await delay(500);
@@ -183,13 +198,13 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       // Floor & Floor Count
       if (parsed.floor) {
           const floor = page.locator('#estate-floor_num').first();
-          if (await floor.isVisible().catch(()=>false)) {
+          if (await floor.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await floor.fill(String(parsed.floor));
           }
       }
       if (parsed.floorCount) {
           const floorCnt = page.locator('#estate-floors_cnt').first();
-          if (await floorCnt.isVisible().catch(()=>false)) {
+          if (await floorCnt.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await floorCnt.fill(String(parsed.floorCount));
           }
       }
@@ -197,7 +212,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       // Area
       if (parsed.area) {
           const areaInput = page.locator('#estate-area-display').first();
-          if (await areaInput.isVisible().catch(()=>false)) {
+          if (await areaInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await areaInput.fill('');
               await areaInput.type(String(parsed.area), { delay: 100 });
           }
@@ -206,7 +221,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       // Description
       if (parsed.description) {
           const descInput = page.locator('textarea[name="Estate[description_ru]"], textarea[name="Estate[description]"], textarea.form-control').last();
-          if (await descInput.isVisible().catch(()=>false)) {
+          if (await descInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await descInput.fill('');
               await descInput.type(parsed.description, { delay: 20 });
           }
@@ -253,7 +268,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
           page.locator('input[type="submit"]').last()
       ];
       for (const btn of saveBtns) {
-          if (await btn.isVisible().catch(()=>false)) {
+          if (await btn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await btn.click({ force: true }).catch(()=>{});
               await delay(2000);
               break;
@@ -266,7 +281,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       // Let's assume it succeeded if no major errors
       let hasError = false;
       const errorMsg = page.locator('.has-error .help-block').first();
-      if (await errorMsg.isVisible().catch(()=>false)) {
+      if (await errorMsg.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
          hasError = true;
          const text = await errorMsg.innerText();
          throw new Error('Ошибка заполнения: ' + text);

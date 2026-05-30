@@ -63,7 +63,7 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
     
     // 3. Запускаем браузер
     const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
-    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&timeout=600000`;
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&headless=false&timeout=600000&--disable-blink-features=AutomationControlled`;
     
     console.log('🚀 Подключаемся к self-hosted Browserless (CDP) для SS.ge...');
     const browser = await chromium.connectOverCDP(wsUrl, { timeout: 0 });
@@ -75,7 +75,8 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
         locale: 'ru-RU',
         permissions: ['geolocation'],
         timezoneId: 'Asia/Tbilisi',
-        viewport: { width: 1280, height: 1024 }
+        viewport: { width: 1280, height: 1024 },
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       });
       const page = await context.newPage();
       page.setDefaultTimeout(40000);
@@ -105,33 +106,53 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       }
 
       // 4. Заполняем форму
+      
+      const fillWithRetry = async (label: string, action: () => Promise<boolean>) => {
+          for (let i = 0; i < 3; i++) {
+              if (await action()) return true;
+              await delay(1000);
+          }
+          return false;
+      };
 
-      // Main type
+      // Шаг 1: Тип недвижимости, Тип сделки
       if (parsed.mainType) {
-          const typeBtn = page.locator(`div:has-text("\${parsed.mainType}")`).last();
-          if (await typeBtn.isVisible().catch(()=>false)) {
+          const typeBtn = page.locator(`div:has-text("${parsed.mainType}")`).last();
+          if (await typeBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await typeBtn.click({ force: true }).catch(()=>{});
               await delay(1000);
           }
       }
 
-      // Deal type
       if (parsed.dealType) {
-          const dealBtn = page.locator(`div:has-text("\${parsed.dealType}")`).last();
-          if (await dealBtn.isVisible().catch(()=>false)) {
+          const dealBtn = page.locator(`div:has-text("${parsed.dealType}")`).last();
+          if (await dealBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await dealBtn.click({ force: true }).catch(()=>{});
               await delay(1000);
           }
       }
 
+      // Функция для перехода на следующий шаг
+      const clickNext = async () => {
+          const nextBtn = page.locator('button.btn-next, button:has-text("Дальше"), button:has-text("Следующий")').last();
+          if (await nextBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
+              await nextBtn.click({ force: true });
+              await delay(2000);
+              return true;
+          }
+          return false;
+      };
+
+      await clickNext(); // Переходим к адресу
+
       // City (trying react-select inputs)
       if (parsed.city) {
           const inputContainer = page.locator('.select__input-container').first();
-          if (await inputContainer.isVisible().catch(()=>false)) {
+          if (await inputContainer.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await inputContainer.click();
               await delay(500);
               await page.keyboard.type(parsed.city, { delay: 100 });
-              await delay(1500);
+              await delay(2000); // wait for suggestion
               await page.keyboard.press('Enter');
               await delay(1000);
           }
@@ -140,23 +161,24 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       // House Number
       if (parsed.houseNumber) {
           const houseInput = page.locator('input[name="house-number"]').first();
-          if (await houseInput.isVisible().catch(()=>false)) {
+          if (await houseInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await houseInput.fill(String(parsed.houseNumber));
           }
       }
 
+      await clickNext(); // Переходим к деталям
+
       // Rooms
       if (parsed.rooms) {
           const roomLabel = page.locator('span', { hasText: 'Комнаты*' }).first();
-          if (await roomLabel.isVisible().catch(()=>false)) {
+          if (await roomLabel.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               const roomsContainer = roomLabel.locator('..');
               const roomBtn = roomsContainer.locator('div', { hasText: new RegExp(`^${parsed.rooms}$`) }).first();
-              if (await roomBtn.isVisible().catch(()=>false)) {
+              if (await roomBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
                   await roomBtn.click({ force: true }).catch(()=>{});
               } else {
-                  // as p element
                   const roomP = roomsContainer.locator('p', { hasText: new RegExp(`^${parsed.rooms}$`) }).first();
-                  if (await roomP.isVisible().catch(()=>false)) await roomP.click({ force: true }).catch(()=>{});
+                  if (await roomP.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) await roomP.click({ force: true }).catch(()=>{});
               }
           }
       }
@@ -164,14 +186,14 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       // Bedrooms
       if (parsed.bedrooms) {
           const bedLabel = page.locator('span', { hasText: 'Спальня*' }).first();
-          if (await bedLabel.isVisible().catch(()=>false)) {
+          if (await bedLabel.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               const bedContainer = bedLabel.locator('..');
               const bedBtn = bedContainer.locator('div', { hasText: new RegExp(`^${parsed.bedrooms}$`) }).first();
-              if (await bedBtn.isVisible().catch(()=>false)) {
+              if (await bedBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
                   await bedBtn.click({ force: true }).catch(()=>{});
               } else {
                   const bedP = bedContainer.locator('p', { hasText: new RegExp(`^${parsed.bedrooms}$`) }).first();
-                  if (await bedP.isVisible().catch(()=>false)) await bedP.click({ force: true }).catch(()=>{});
+                  if (await bedP.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) await bedP.click({ force: true }).catch(()=>{});
               }
           }
       }
@@ -179,21 +201,22 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       // Total Area
       if (parsed.totalArea) {
           const areaInput = page.locator('input[name="totalArea"]').first();
-          if (await areaInput.isVisible().catch(()=>false)) {
-              await areaInput.fill(String(parsed.totalArea));
+          if (await areaInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
+              await areaInput.fill('');
+              await areaInput.type(String(parsed.totalArea), { delay: 100 });
           }
       }
 
       // Floor & Floors
       if (parsed.floor) {
           const floor = page.locator('input[name="floor"]').first();
-          if (await floor.isVisible().catch(()=>false)) {
+          if (await floor.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await floor.fill(String(parsed.floor));
           }
       }
       if (parsed.floors) {
           const floors = page.locator('input[name="floors"]').first();
-          if (await floors.isVisible().catch(()=>false)) {
+          if (await floors.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await floors.fill(String(parsed.floors));
           }
       }
@@ -201,15 +224,17 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       // Status
       if (parsed.status) {
           const statusP = page.locator('p', { hasText: parsed.status }).first();
-          if (await statusP.isVisible().catch(()=>false)) {
+          if (await statusP.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await statusP.click({ force: true }).catch(()=>{});
           }
       }
 
+      await clickNext(); // Переходим к описанию и фото
+
       // Description
       if (parsed.description) {
           const descInput = page.locator('textarea').last();
-          if (await descInput.isVisible().catch(()=>false)) {
+          if (await descInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await descInput.fill(parsed.description);
           }
       }
@@ -217,7 +242,7 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
       // Price
       if (parsed.price) {
           const priceInput = page.locator('input[type="number"]').last();
-          if (await priceInput.isVisible().catch(()=>false)) {
+          if (await priceInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await priceInput.fill(String(parsed.price));
           }
       }
@@ -243,7 +268,7 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
                   const fileInput = page.locator('input[type="file"]').first();
                   if (await fileInput.count() > 0) {
                       await fileInput.setInputFiles(fileBuffers as any);
-                      await delay(5000); // wait for upload
+                      await delay(8000); // wait for upload
                   }
               }
           } catch (e: any) {
@@ -253,13 +278,23 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
 
       console.log(`[SSgePublisher] Filled form fields & photos, attempting publish...`);
       
-      // Submit
-      const nextBtn = page.locator('button.btn-next').last();
-      if (await nextBtn.isVisible().catch(()=>false)) {
-          await nextBtn.click({ force: true });
-          await delay(3000);
+      // Submit / Publish button
+      const publishBtns = [
+          page.locator('button:has-text("Гамокекнеба"), button:has-text("Опубликовать"), button:has-text("Подтвердить")').last(),
+          page.locator('button.btn-next').last()
+      ];
+      
+      for (const btn of publishBtns) {
+          if (await btn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
+              await btn.scrollIntoViewIfNeeded().catch(()=>{});
+              await delay(1000);
+              await btn.click({ force: true });
+              await delay(3000);
+              break;
+          }
       }
 
+      await delay(10000); // wait for success page redirect
       console.log(`[SSgePublisher] Finished successfully!`);
 
       await supabaseServer.from('listings').update({ 
@@ -287,3 +322,4 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
     }).eq('id', objectId);
   }
 }
+
