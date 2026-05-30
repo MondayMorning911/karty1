@@ -42,7 +42,7 @@ export class AuthManager {
       const fillWithDelay = async (locator: string, text: string) => {
         await page.click(locator, { timeout: 10000 });
         await delay(Math.random() * 200 + 200);
-        await page.fill(locator, text);
+        await page.locator(locator).pressSequentially(text, { delay: 100 });
       };
 
       console.log(`[AuthManager] Navigating to ${targetUrl}`);
@@ -69,16 +69,16 @@ export class AuthManager {
         await page.waitForSelector('#_r_m_', { timeout: 15000 });
         await page.click('#_r_m_');
         await delay(100);
-        await page.locator('#_r_m_').fill(loginStr);
+        await page.locator('#_r_m_').pressSequentially(loginStr, { delay: 150 });
         await delay(Math.random() * 500 + 200);
         
         await page.click('#_r_n_');
         await delay(100);
-        await page.fill('#_r_n_', passwordStr);
+        await page.locator('#_r_n_').pressSequentially(passwordStr, { delay: 100 });
         
         await delay(Math.random() * 1000 + 500);
         
-        const submitBtn = page.locator('button:has-text("Войти"), button.bg-blue-100').first();
+        const submitBtn = page.locator('button.bg-blue-100').first();
         if (await submitBtn.isVisible().catch(() => false)) {
             await submitBtn.hover();
             await delay(Math.random() * 300 + 100);

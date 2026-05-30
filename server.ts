@@ -123,7 +123,7 @@ echo "Steel Browser is running on port 8080"
     }
 
     try {
-      const { error } = await supabaseServer.from('platform_sessions').delete().match({ user_id: userId, platform: siteKey });
+      const { error } = await supabaseServer.from('platform_sessions').delete().eq('user_id', userId).eq('platform', siteKey);
       if (error) throw error;
       res.json({ success: true, message: 'Session removed' });
     } catch (error: any) {

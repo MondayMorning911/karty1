@@ -63,7 +63,7 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
     
     // 3. Запускаем браузер
     const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN || 'karty-secret-token';
-    const wsUrl = `ws://72.56.1.59:3010?token=\${BROWSERLESS_TOKEN}&stealth=true&timeout=600000`;
+    const wsUrl = `ws://72.56.1.59:3010?token=${BROWSERLESS_TOKEN}&stealth=true&timeout=600000`;
     
     console.log('🚀 Подключаемся к self-hosted Browserless (CDP) для SS.ge...');
     const browser = await chromium.connectOverCDP(wsUrl, { timeout: 0 });

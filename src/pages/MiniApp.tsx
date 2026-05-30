@@ -669,6 +669,8 @@ function PlatformsTab({ uid }: { uid: string | null }) {
           }
         } catch (e) {}
         throw new Error(errorMsg);
+      } else {
+        window.location.reload();
       }
     } catch (e: any) {
       alert('Ошибка: ' + e.message);

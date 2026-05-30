@@ -254,17 +254,28 @@ export async function publishMyhomeAsync(userId: string, objectId: string, text:
 
       console.log(`[MyHomePublisher] Filled form fields & photos, attempting publish...`);
       
-      const nextBtn = page.locator('div:has-text("გამოქვეყნება"), button:has-text("Опубликовать")').last();
+      const submitSelector = 'div:has-text("გამოქვეყნება"), button:has-text("Опубликовать"), button.myhome\\:bg-primary-green-100, div.luk-relative.luk-z-10.luk-flex';
+      const nextBtn = page.locator(submitSelector).last();
       if (await nextBtn.isVisible().catch(()=>false)) {
+          await nextBtn.scrollIntoViewIfNeeded().catch(()=>{});
+          await delay(1000);
           await nextBtn.click({ force: true });
-          await delay(4000);
       } else {
           // find submit button
-          const btn = page.locator('button[type="submit"], input[type="submit"]').last();
+          const btn = page.locator('button[type="submit"], input[type="submit"], button.myhome\\:bg-primary-green-100').last();
           if (await btn.isVisible().catch(()=>false)) {
+              await btn.scrollIntoViewIfNeeded().catch(()=>{});
+              await delay(1000);
               await btn.click({ force: true });
-              await delay(4000);
           }
+      }
+
+      await delay(10000);
+      try {
+        await page.waitForURL('**/statement/success**', { timeout: 15000 });
+      } catch(e) {
+        console.log('[MyHomePublisher] Did not redirect to success page, wait additional 5s...');
+        await delay(5000);
       }
 
       await supabaseServer.from('listings').update({ status: 'published' }).eq('id', objectId);
