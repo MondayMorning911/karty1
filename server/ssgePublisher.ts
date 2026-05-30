@@ -126,6 +126,13 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
           await delay(3000);
       }
 
+      const draftPopupBtn = page.locator('button:has-text("Добавить новое заявление"), button:has-text("ახალი განცხადების დამატება")').first();
+      if (await draftPopupBtn.waitFor({ state: 'visible', timeout: 3000 }).catch(() => false)) {
+          console.log(`[SSgePublisher] Found draft popup. Clicking "Добавить новое заявление"...`);
+          await draftPopupBtn.click({ force: true }).catch(() => {});
+          await delay(2000);
+      }
+
       // 4. Заполняем форму
       
       const fillWithRetry = async (label: string, action: () => Promise<boolean>) => {
