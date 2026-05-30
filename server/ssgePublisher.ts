@@ -105,6 +105,12 @@ export async function publishSsgeAsync(userId: string, objectId: string, text: s
           throw new Error('Сессия недействительна. Требуется повторная авторизация (перенаправлено на логин)');
       }
 
+      // Check for auth button to confirm if cookies failed
+      const authBtn = page.locator('a[href*="login"], a:has-text("Войти"), a:has-text("ავტორიზაცია"), a:has-text("Авторизация"), button:has-text("Войти"), button:has-text("Авторизация")').first();
+      if (await authBtn.isVisible().catch(()=>false)) {
+          throw new Error('Сессия недействительна. Найдена кнопка авторизации (куки не сработали).');
+      }
+
       // 4. Заполняем форму
       
       const fillWithRetry = async (label: string, action: () => Promise<boolean>) => {

@@ -89,14 +89,14 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
           await page.goto('https://realting.com/ru/account/objects/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
       } catch (e: any) {
           if (e.message && e.message.includes('ERR_ABORTED')) {
-              await delay(2000);
+              await delay(600);
               await page.goto('https://realting.com/ru/account/objects/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
           } else {
               throw e;
           }
       }
       console.log(`[RealtingPublisher] Finished navigating.`);
-      await delay(2000);
+      await delay(600);
 
       const currentUrl = await page.url();
       if (currentUrl.includes('login')) {
@@ -111,7 +111,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
         const dealBtn = page.locator('span', { hasText: new RegExp(`^\${dealText}\$`, 'i') }).first();
         if (await dealBtn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
             await dealBtn.click({ force: true }).catch(() => {});
-            await delay(1000);
+            await delay(300);
         }
       }
 
@@ -121,7 +121,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
           if (await mainTypeSelect.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               // we can select by label
               await mainTypeSelect.selectOption({ label: parsed.mainType }).catch(() => {});
-              await delay(1000);
+              await delay(300);
           }
       }
 
@@ -130,7 +130,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
           const typeSelect = page.locator('#estate-type_id').first();
           if (await typeSelect.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await typeSelect.selectOption({ label: parsed.subType }).catch(() => {});
-              await delay(1000);
+              await delay(300);
           }
       }
 
@@ -139,21 +139,21 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
           const countryContainer = page.locator('#select2-estate-country_code-container').first();
           if (await countryContainer.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await countryContainer.click({ force: true }).catch(()=>{});
-              await delay(1000);
+              await delay(300);
               const searchInput = page.locator('input.select2-search__field').first();
               if (await searchInput.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
                   await searchInput.fill('');
                   await searchInput.type(parsed.country, { delay: 100 });
-                  await delay(2000); // wait for suggestion
+                  await delay(600); // wait for suggestion
                   
                   // Try to click the suggestion
                   const option = page.locator('li.select2-results__option', { hasText: parsed.country }).first();
                   if (await option.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
-                      await option.click({ force: true });
+                      await option.click({ force: true, timeout: 5000 }).catch(()=>{});
                   } else {
                       await page.keyboard.press('Enter');
                   }
-                  await delay(1000);
+                  await delay(300);
               }
           }
       }
@@ -164,21 +164,21 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
           const regionPlaceholder = page.locator('span.select2-selection__placeholder', { hasText: 'Начните вводить адрес' }).first();
           if (await regionPlaceholder.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await regionPlaceholder.click({ force: true }).catch(()=>{});
-              await delay(1000);
+              await delay(300);
               const searchInputs = page.locator('input.select2-search__field');
               // use the visible one
               for (let i = 0; i < await searchInputs.count(); i++) {
                  if (await searchInputs.nth(i).isVisible()) {
                      await searchInputs.nth(i).fill('');
                      await searchInputs.nth(i).type(parsed.address, { delay: 100 });
-                     await delay(3000); // wait for suggestions
+                     await delay(1000); // wait for suggestions
                      const option = page.locator('li.select2-results__option').first();
                      if (await option.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
-                         await option.click({ force: true });
+                         await option.click({ force: true, timeout: 5000 }).catch(()=>{});
                      } else {
                          await page.keyboard.press('Enter');
                      }
-                     await delay(1000);
+                     await delay(300);
                      break;
                  }
               }
@@ -249,7 +249,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
                   if (await fileInput.count() > 0) {
                       await fileInput.setInputFiles(fileBuffers as any);
                       // wait for uploads to process
-                      await delay(5000);
+                      await delay(2000);
                   } else {
                       console.warn("[RealtingPublisher] Could not find file input for photos");
                   }
@@ -270,7 +270,7 @@ export async function publishRealtingAsync(userId: string, objectId: string, tex
       for (const btn of saveBtns) {
           if (await btn.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false)) {
               await btn.click({ force: true }).catch(()=>{});
-              await delay(2000);
+              await delay(600);
               break;
           }
       }
