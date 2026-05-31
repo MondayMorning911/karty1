@@ -25,41 +25,51 @@ export async function publishMyhomeAsync(
     // ── Step 1: AI parse ────────────────────────────────────────────────────
     const prompt = `
 Вам предоставлен текст объявления недвижимости: "${text}".
-Для публикации на myhome.ge определите параметры и верните JSON.
-Если поле логически можно вывести — укажите. Тип проекта всегда "Нестандартный".
+Для публикации на myhome.ge определите все параметры и верните JSON.
+Используй логику для заполнения недостающих полей — НЕ оставляй их null если можно вывести.
 
-Поля:
+ПРАВИЛА ВЫВОДА (применяй всегда):
+
+mainType: квартира/студия/апартаменты → "Квартира"; дом/коттедж → "Частный дом"; дача → "Дача"; участок/земля → "Земельный участок"; офис/магазин/склад → "Коммерческая площадь"; отель/гостиница → "Гостиница". По умолчанию "Квартира".
+
+dealType: продаж/продается → "Продается"; аренда/сдается/rent → "Сдается"; залог → "Сдается под залог"; посуточно → "Сдается на день". По умолчанию "Продается".
+
+status: "новостройка"/"новый дом"/"новое здание" → "Новое здание"; "строится"/"строящийся" → "В процессе строительства"; иначе → "Старое здание".
+
+condition: "отремонтирован"/"ремонт"/"renovated"/"меблирован"/"обставлен" → "Недавно отремонтированный"; "старый ремонт"/"требует ремонта" → "Старый ремонт"; "белый каркас" → "Белый каркас"; "черный каркас" → "Черный каркас"; "зеленый каркас" → "Зеленый каркас"; иначе → "Старый ремонт".
+
+rooms: если не указано явно — высчитай из площади:
+  до 35 м² → 1, 36–55 м² → 2, 56–80 м² → 3, 81–120 м² → 4, свыше 120 м² → 5.
+  Максимум 10.
+
+floor: если не упомянут явно → оставь null.
+
+maxFloor: если не указан явно, но известен этаж (floor) → floor + 7. Если этаж тоже неизвестен → null.
+
+Поля JSON:
 - mainType: "Квартира" | "Частный дом" | "Дача" | "Земельный участок" | "Коммерческая площадь" | "Гостиница"
 - dealType: "Продается" | "Сдается" | "Сдается под залог" | "Сдается на день"
 - status: "Старое здание" | "Новое здание" | "В процессе строительства"
 - condition: "Недавно отремонтированный" | "Старый ремонт" | "Текущий ремонт" | "В процессе ремонта" | "Белый каркас" | "Черный каркас" | "Зеленый каркас"
-- city: Город (например "Тбилиси", "Батуми")
-- street: Улица (только название, без города и номера дома)
-- streetNumber: Номер дома (строка, может быть null)
-- price: Цена в USD (число)
-- area: Площадь в м² (число)
-- rooms: Количество комнат (число от 1 до 10; если 10 и более — вернуть 10)
-- floor: Этаж (число)
-- maxFloor: Всего этажей в доме (число)
-- description: Красивый текст описания на русском языке для объявления.
+- city: Город (например "Тбилиси", "Батуми") или null
+- street: Улица (только название, без города и номера дома) или null
+- streetNumber: Номер дома (строка или null)
+- price: Цена в USD (число или null)
+- area: Площадь в м² (число или null)
+- rooms: Количество комнат (число 1–10, применяй правило выше)
+- floor: Этаж (число или null)
+- maxFloor: Всего этажей (число, применяй правило выше, или null)
+- description: Красивый текст описания на русском для объявления.
 
-МАССИВ missing_fields:
-Создайте свойство "missing_fields" (массив строк на русском).
-Включайте только ОБЯЗАТЕЛЬНЫЕ поля, которых не хватает:
-- mainType → "Тип недвижимости"
-- dealType → "Тип сделки"
-- status   → "Статус здания"
-- condition → "Состояние"
-- city     → "Город"
-- street   → "Улица"
-- price    → "Цена"
-- area     → "Площадь"
-- rooms    → "Количество комнат"
-- floor    → "Этаж"
-- maxFloor → "Всего этажей"
-Если все обязательные поля есть или могут быть выведены — верните пустой массив [].
+МАССИВ missing_fields — включай ТОЛЬКО то, что НЕВОЗМОЖНО определить никакой логикой:
+- Нет city → "Город"
+- Нет street → "Улица"
+- Нет price → "Цена"
+- Нет area И нет явного указания на rooms → "Площадь"
+Всё остальное (mainType, dealType, status, condition, rooms, floor, maxFloor) — выводи по правилам, в missing_fields НЕ добавляй.
+Если все критичные поля есть — верни пустой массив [].
 
-Верните ТОЛЬКО JSON.
+Верни ТОЛЬКО JSON.
 `;
 
     const aiRes = await openai.chat.completions.create({
@@ -72,35 +82,56 @@ export async function publishMyhomeAsync(
     const parsed = JSON.parse(rawResult);
     console.log(`[MyHomePublisher] Parsed:`, parsed);
 
-    // ── Missing fields validation ───────────────────────────────────────────
-    const missingFromAI: string[] = Array.isArray(parsed.missing_fields)
-      ? parsed.missing_fields
-      : [];
-    const missingManual: string[] = [];
-    if (!parsed.mainType) missingManual.push("Тип недвижимости");
-    if (!parsed.dealType) missingManual.push("Тип сделки");
-    if (!parsed.status) missingManual.push("Статус здания");
-    if (!parsed.condition) missingManual.push("Состояние");
-    if (!parsed.city) missingManual.push("Город");
-    if (!parsed.street) missingManual.push("Улица");
-    if (!parsed.price) missingManual.push("Цена");
-    if (!parsed.area) missingManual.push("Площадь");
-    if (!parsed.rooms) missingManual.push("Количество комнат");
-    if (!parsed.floor) missingManual.push("Этаж");
-    if (!parsed.maxFloor) missingManual.push("Всего этажей");
+    // ── Fallback-значения для полей которые можно вывести ──────────────────
 
-    const allMissing = Array.from(
-      new Set([...missingManual, ...missingFromAI]),
-    );
-    if (allMissing.length > 0) {
-      const errorMsg = `Необходимо заполнить: ${allMissing.join(", ")}`;
-      console.warn(`[MyHomePublisher] Missing required fields: ${errorMsg}`);
+    // rooms: из площади если AI не заполнил
+    if (!parsed.rooms && parsed.area) {
+      const a = Number(parsed.area);
+      if (a <= 35) parsed.rooms = 1;
+      else if (a <= 55) parsed.rooms = 2;
+      else if (a <= 80) parsed.rooms = 3;
+      else if (a <= 120) parsed.rooms = 4;
+      else parsed.rooms = 5;
+    }
+    if (!parsed.rooms) parsed.rooms = 1;
+
+    // maxFloor: floor + 7 если не указано; иначе разумный дефолт
+    if (!parsed.maxFloor && parsed.floor) {
+      parsed.maxFloor = Number(parsed.floor) + 7;
+    }
+    if (!parsed.maxFloor) {
+      parsed.maxFloor = 9;
+    }
+
+    // floor: дефолт 1 если совсем не указан
+    if (!parsed.floor) parsed.floor = 1;
+
+    // Enum-поля — дефолты если AI не вернул значение
+    if (!parsed.mainType) parsed.mainType = "Квартира";
+    if (!parsed.dealType) parsed.dealType = "Продается";
+    if (!parsed.status) parsed.status = "Старое здание";
+    if (!parsed.condition) parsed.condition = "Старый ремонт";
+
+    // ── Валидация: только реально критичные поля ────────────────────────────
+    const criticalMissing: string[] = [];
+    if (!parsed.city) criticalMissing.push("Город");
+    if (!parsed.street) criticalMissing.push("Улица");
+    if (!parsed.price) criticalMissing.push("Цена");
+    if (!parsed.area) criticalMissing.push("Площадь");
+
+    // Добавляем то, что AI сам пометил как отсутствующее (без дублей)
+    if (Array.isArray(parsed.missing_fields)) {
+      for (const f of parsed.missing_fields as string[]) {
+        if (!criticalMissing.includes(f)) criticalMissing.push(f);
+      }
+    }
+
+    if (criticalMissing.length > 0) {
+      const errorMsg = `Необходимо заполнить: ${criticalMissing.join(", ")}`;
+      console.warn(`[MyHomePublisher] Missing critical fields: ${errorMsg}`);
       await supabaseServer
         .from("listings")
-        .update({
-          status: "error",
-          error_details: errorMsg,
-        })
+        .update({ status: "error", error_details: errorMsg })
         .eq("id", objectId);
       return;
     }
@@ -405,7 +436,6 @@ export async function publishMyhomeAsync(
 
       // ── Step 8: Price ─────────────────────────────────────────────────────
       console.log("[MyHomePublisher] Step 8: price...");
-      // Ensure USD is selected
       const currencyContainer = page
         .locator(
           "div.relative.z-10.flex.h-8.w-10.cursor-pointer.items-center.justify-center.font-medium",
@@ -423,7 +453,6 @@ export async function publishMyhomeAsync(
         if (!currentCurrency?.trim().includes("$")) {
           await currencyContainer.click({ force: true });
           await delay(600);
-          // Select $ from dropdown if it opened
           const dollarOpt = page
             .locator(
               'li:has-text("$"), span:has-text("$"), div:has-text("USD")',
@@ -442,7 +471,6 @@ export async function publishMyhomeAsync(
       }
 
       if (parsed.price) {
-        // The price field label contains the actual input inside it
         const priceLabel = page
           .locator("label.mr-3.hidden.cursor-text.text-nowrap.text-xs")
           .first();
@@ -459,7 +487,6 @@ export async function publishMyhomeAsync(
             await delay(300);
           }
         } else {
-          // Fallback: find any visible price input near "Полная стоимость"
           const priceInput = page
             .locator(
               'input[placeholder*="стоимость"], input[placeholder*="цена"], input[type="number"]',
@@ -537,7 +564,6 @@ export async function publishMyhomeAsync(
 
       // ── Step 12: Project type ─────────────────────────────────────────────
       console.log("[MyHomePublisher] Step 12: project type...");
-      // Use attribute-contains selector to avoid escaping "/" and ":" in Tailwind class names
       const projectDropdown = page
         .locator(
           'span[class*="luk-pb-2"][class*="luk-text-left"][class*="luk-text-sm"][class*="luk-absolute"]',
@@ -567,7 +593,6 @@ export async function publishMyhomeAsync(
           await delay(800);
         }
       } else {
-        // Fallback: old-style dropdown
         const selectBox = page
           .locator('div[class*="luk-cursor-pointer"]', { hasText: "Выберите" })
           .first();
@@ -596,7 +621,6 @@ export async function publishMyhomeAsync(
 
       // ── Step 13: Description ──────────────────────────────────────────────
       console.log("[MyHomePublisher] Step 13: description...");
-      // Switch to Russian tab
       const ruBtn = page
         .locator('button[class*="luk-text-xs"][class*="luk-font-medium"]')
         .filter({ hasText: "Русский" })
@@ -610,7 +634,6 @@ export async function publishMyhomeAsync(
         await ruBtn.click({ force: true });
         await delay(500);
       } else {
-        // Broader fallback
         const ruBtnFallback = page
           .locator('button:has-text("Русский")')
           .first();
@@ -700,7 +723,6 @@ export async function publishMyhomeAsync(
         await delay(800);
         await publishBtn.click({ force: true });
       } else {
-        // Fallback selectors
         const fallbackSubmit = page
           .locator(
             'button:has-text("Опубликовать"), button[type="submit"], div:has-text("გამოქვეყნება")',
