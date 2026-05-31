@@ -220,18 +220,18 @@ maxFloor: если не указан явно, но известен этаж (f
         }
       };
 
-      // ── Navigate to statements page ──────────────────────────────────────
-      console.log("[MyHomePublisher] Navigating to statements page...");
-      const statementsUrl = "https://statements.myhome.ge/ru";
+      // ── Step 0: Проверка авторизации на myhome.ge/ru/ ───────────────────
+      console.log("[MyHomePublisher] Step 0: checking auth on myhome.ge...");
+      const mainUrl = "https://www.myhome.ge/ru/";
       try {
-        await page.goto(statementsUrl, {
+        await page.goto(mainUrl, {
           waitUntil: "domcontentloaded",
           timeout: 30000,
         });
       } catch (e: any) {
         if (e.message?.includes("ERR_ABORTED")) {
           await delay(2000);
-          await page.goto(statementsUrl, {
+          await page.goto(mainUrl, {
             waitUntil: "domcontentloaded",
             timeout: 30000,
           });
@@ -239,36 +239,66 @@ maxFloor: если не указан явно, но известен этаж (f
           throw e;
         }
       }
-
       await handleTurnstile();
       await delay(2000);
 
-      const currentUrl = await page.url();
-      if (currentUrl.includes("login") || currentUrl.includes("auth.tnet.ge")) {
+      // Ищем имя пользователя — признак активной сессии
+      const userNameSpan = page
+        .locator("span.max-w-\\[120px\\].truncate")
+        .first();
+      const isLoggedIn = await userNameSpan
+        .waitFor({ state: "visible", timeout: 5000 })
+        .then(() => true)
+        .catch(() => false);
+
+      if (!isLoggedIn) {
+        // Проверяем кнопку «Авторизация» — точное подтверждение что сессия истекла
+        console.warn(
+          "[MyHomePublisher] Session expired — auth button detected.",
+        );
+
+        // Удаляем протухшую сессию из БД → фронтенд покажет «Требуется вход»
+        await supabaseServer
+          .from("platform_sessions")
+          .delete()
+          .eq("user_id", userId)
+          .eq("platform", "myhome");
+
+        // ТГ уведомление
+        const tgMsg =
+          "⚠️ <b>MyHome.ge — требуется авторизация</b>\n\n" +
+          "Сессия истекла. Откройте Karty → раздел <b>Площадки</b> → нажмите <b>Подключить MyHome</b>.";
+        await sendBotMessage(userId, tgMsg);
+
         throw new Error(
-          "Сессия недействительна. Требуется повторная авторизация (перенаправлено на логин)",
+          "Сессия MyHome истекла. Требуется повторная авторизация.",
         );
       }
 
-      // Проверяем попап «Для получения услуги пройдите авторизацию»
-      const checkAuthPopup = async () => {
-        const authPopup = page
-          .locator('text="Для получения услуги пройдите авторизацию"')
-          .first();
-        const isVisible = await authPopup
-          .waitFor({ state: "visible", timeout: 3000 })
-          .then(() => true)
-          .catch(() => false);
-        if (isVisible) {
-          const msg =
-            "⚠️ <b>MyHome.ge — требуется авторизация</b>\n\n" +
-            "Сессия истекла или недействительна. Откройте Karty и переподключите аккаунт MyHome.";
-          await sendBotMessage(userId, msg);
-          throw new Error(
-            "Требуется авторизация на MyHome.ge (попап авторизации)",
-          );
+      const userName = await userNameSpan.textContent().catch(() => "");
+      console.log(`[MyHomePublisher] Logged in as: ${userName?.trim()}`);
+
+      // ── Step 1: Переходим на форму создания объявления ────────────────────
+      console.log("[MyHomePublisher] Step 1: navigating to create form...");
+      const createUrl = "https://statements.myhome.ge/ru/statement/create";
+      try {
+        await page.goto(createUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 30000,
+        });
+      } catch (e: any) {
+        if (e.message?.includes("ERR_ABORTED")) {
+          await delay(2000);
+          await page.goto(createUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: 30000,
+          });
+        } else {
+          throw e;
         }
-      };
+      }
+      await handleTurnstile();
+      await delay(2000);
 
       // Dismiss draft popup if it appears
       const discardDraftBtn = page
@@ -282,44 +312,10 @@ maxFloor: если не указан явно, но известен этаж (f
           .then(() => true)
           .catch(() => false)
       ) {
-        console.log(
-          "[MyHomePublisher] Draft popup detected — discarding draft.",
-        );
+        console.log("[MyHomePublisher] Draft popup detected — discarding.");
         await discardDraftBtn.click({ force: true });
         await delay(1000);
       }
-
-      // ── Step 1: Click "Добавить" button ──────────────────────────────────
-      console.log("[MyHomePublisher] Step 1: clicking Add button...");
-      const addBtn = page
-        .locator(
-          'a.hidden.gap-2, a:has-text("Добавить"), a[href*="statement/create"]',
-        )
-        .first();
-      if (
-        await addBtn
-          .waitFor({ state: "visible", timeout: 8000 })
-          .then(() => true)
-          .catch(() => false)
-      ) {
-        await addBtn.click({ force: true });
-        await delay(2000);
-      } else {
-        console.log(
-          "[MyHomePublisher] Add button not found, navigating directly to create form...",
-        );
-        await page.goto("https://statements.myhome.ge/ru/statement/create", {
-          waitUntil: "domcontentloaded",
-          timeout: 30000,
-        });
-        await delay(2000);
-      }
-
-      await handleTurnstile();
-      await delay(1500);
-
-      // Проверяем попап авторизации после открытия формы
-      await checkAuthPopup();
 
       // Helper: click a luk-span option by exact text
       const clickLukSpan = async (
