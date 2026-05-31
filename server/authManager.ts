@@ -148,12 +148,18 @@ export class AuthManager {
           .catch((e) => console.warn("ssge redirect warning:", e.message));
         await delay(3000);
       } else if (platform === "myhome") {
-        // Ждём загрузки формы
-        await page.waitForSelector("#_r_u_", { timeout: 20000 });
+        // Ждём загрузки формы — используем стабильный name-атрибут
+        // ID типа #_r_u_ динамически генерируются React и могут меняться
+        await page.waitForSelector(
+          'input[name="Email"], #_r_u_, input[placeholder*="E-mail"]',
+          { timeout: 20000 },
+        );
         await delay(Math.random() * 800 + 600);
 
         // Симулируем движение мыши к полю логина
-        const loginField = page.locator("#_r_u_");
+        const loginField = page
+          .locator('input[name="Email"], #_r_u_, input[placeholder*="E-mail"]')
+          .first();
         const loginBox = await loginField.boundingBox();
         if (loginBox) {
           await page.mouse.move(
@@ -171,7 +177,9 @@ export class AuthManager {
         await delay(Math.random() * 600 + 400);
 
         // Переход к паролю
-        const passField = page.locator("#_r_v_");
+        const passField = page
+          .locator('input[name="Password"], #_r_v_, input[type="password"]')
+          .first();
         const passBox = await passField.boundingBox();
         if (passBox) {
           await page.mouse.move(
@@ -191,7 +199,7 @@ export class AuthManager {
         // Нажимаем кнопку «Войти»
         const submitBtn = page
           .locator(
-            'button.p-4.rounded-lg.cursor-pointer.bg-blue-100, button[type="submit"]',
+            'button[type="submit"], button.bg-blue-100, button:has-text("Войти")',
           )
           .first();
         const submitBox = await submitBtn.boundingBox().catch(() => null);
