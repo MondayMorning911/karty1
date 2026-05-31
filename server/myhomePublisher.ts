@@ -1,5 +1,6 @@
 import { chromium } from "playwright-core";
 import { supabaseServer } from "./supabase.js";
+import { sendBotMessage } from "./bot.js";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 dotenv.config();
@@ -249,6 +250,26 @@ maxFloor: если не указан явно, но известен этаж (f
         );
       }
 
+      // Проверяем попап «Для получения услуги пройдите авторизацию»
+      const checkAuthPopup = async () => {
+        const authPopup = page
+          .locator('text="Для получения услуги пройдите авторизацию"')
+          .first();
+        const isVisible = await authPopup
+          .waitFor({ state: "visible", timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        if (isVisible) {
+          const msg =
+            "⚠️ <b>MyHome.ge — требуется авторизация</b>\n\n" +
+            "Сессия истекла или недействительна. Откройте Karty и переподключите аккаунт MyHome.";
+          await sendBotMessage(userId, msg);
+          throw new Error(
+            "Требуется авторизация на MyHome.ge (попап авторизации)",
+          );
+        }
+      };
+
       // Dismiss draft popup if it appears
       const discardDraftBtn = page
         .locator(
@@ -296,6 +317,9 @@ maxFloor: если не указан явно, но известен этаж (f
 
       await handleTurnstile();
       await delay(1500);
+
+      // Проверяем попап авторизации после открытия формы
+      await checkAuthPopup();
 
       // Helper: click a luk-span option by exact text
       const clickLukSpan = async (
