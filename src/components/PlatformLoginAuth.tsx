@@ -48,10 +48,11 @@ export const PlatformLoginAuth = ({
       });
       const data = await res.json();
 
-      if (data.status === "success") {
+      if (res.ok && data.status === "success") {
         setStep("done");
       } else {
-        setError(data.message || "Неверный логин или пароль");
+        // data.error — текст от сервера, data.message — запасной вариант
+        setError(data.error || data.message || "Неверный логин или пароль");
       }
     } catch (err: any) {
       setError(err.message || "Ошибка сети");

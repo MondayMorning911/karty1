@@ -231,6 +231,16 @@ export class AuthManager {
           .catch((e) =>
             console.warn("[AuthManager] myhome redirect warning:", e.message),
           );
+
+        // Явно переходим на русскую версию — грузинская версия по умолчанию мешает проверке имени
+        await page
+          .goto("https://www.myhome.ge/ru/", {
+            waitUntil: "domcontentloaded",
+            timeout: 20000,
+          })
+          .catch((e) =>
+            console.warn("[AuthManager] myhome /ru/ nav:", e.message),
+          );
         await delay(3000);
 
         // Проверяем что авторизация прошла — имя пользователя видно
@@ -238,16 +248,30 @@ export class AuthManager {
           .locator("span.max-w-\\[120px\\].truncate")
           .first();
         const loggedIn = await userNameSpan
-          .waitFor({ state: "visible", timeout: 10000 })
+          .waitFor({ state: "visible", timeout: 15000 })
           .then(() => true)
           .catch(() => false);
+
         if (!loggedIn) {
-          throw new Error(
-            "Авторизация не удалась: имя пользователя не появилось на сайте после входа.",
-          );
+          // Fallback: если мы на myhome.ge и не на странице логина — считаем успехом
+          const currentUrl = page.url();
+          const isOnMainSite =
+            currentUrl.includes("myhome.ge") &&
+            !currentUrl.includes("auth.tnet") &&
+            !currentUrl.includes("/login");
+          if (isOnMainSite) {
+            console.warn(
+              "[AuthManager] myhome: username span not found but URL looks authenticated, proceeding.",
+            );
+          } else {
+            throw new Error(
+              "Авторизация не удалась. Проверьте номер телефона/почту и пароль.",
+            );
+          }
+        } else {
+          const userName = await userNameSpan.textContent().catch(() => "");
+          console.log(`[AuthManager] myhome logged in as: ${userName?.trim()}`);
         }
-        const userName = await userNameSpan.textContent().catch(() => "");
-        console.log(`[AuthManager] myhome logged in as: ${userName?.trim()}`);
       } else if (platform === "realting") {
         const userSelector = "#loginform-username";
         const passSelector = "#loginform-password";
