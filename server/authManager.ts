@@ -156,64 +156,61 @@ export class AuthManager {
         );
         await delay(Math.random() * 800 + 600);
 
-        // Симулируем движение мыши к полю логина
+        // Поле логина — сайт уже показывает "+995", вводим только часть после кода
+        const isEmail = loginStr.includes("@");
+        // Для телефона: убираем 995 из начала, оставляем чистый номер
+        const loginToType =
+          !isEmail && loginStr.startsWith("995") ? loginStr.slice(3) : loginStr;
+
         const loginField = page
           .locator('input[name="Email"], #_r_u_, input[placeholder*="E-mail"]')
           .first();
-        const loginBox = await loginField.boundingBox();
-        if (loginBox) {
-          await page.mouse.move(
-            loginBox.x + loginBox.width * 0.3 + Math.random() * 20,
-            loginBox.y + loginBox.height / 2 + Math.random() * 4,
-            { steps: 8 },
-          );
-        }
+
+        // Фокус + печать
+        await loginField.focus();
         await delay(Math.random() * 300 + 200);
-        await loginField.click();
-        await delay(Math.random() * 400 + 200);
-        await loginField.pressSequentially(loginStr, {
+        await loginField.pressSequentially(loginToType, {
           delay: Math.random() * 80 + 80,
         });
         await delay(Math.random() * 600 + 400);
+        console.log(
+          `[AuthManager] myhome: typed login "${loginToType}" (isEmail=${isEmail})`,
+        );
 
-        // Переход к паролю
+        // Переходим к паролю через Tab — надёжнее чем mouse.click
+        // (floating-label инпут с top-[6px] оффсетом перехватывает клик по координатам)
+        await page.keyboard.press("Tab");
+        await delay(Math.random() * 300 + 200);
+
         const passField = page
           .locator('input[name="Password"], #_r_v_, input[type="password"]')
           .first();
-        const passBox = await passField.boundingBox();
-        if (passBox) {
-          await page.mouse.move(
-            passBox.x + passBox.width * 0.3 + Math.random() * 20,
-            passBox.y + passBox.height / 2 + Math.random() * 4,
-            { steps: 6 },
-          );
-        }
-        await delay(Math.random() * 300 + 150);
-        await passField.click();
+        await passField.focus();
         await delay(Math.random() * 300 + 200);
         await passField.pressSequentially(passwordStr, {
           delay: Math.random() * 60 + 70,
         });
         await delay(Math.random() * 800 + 600);
+        console.log("[AuthManager] myhome: password typed");
 
-        // Нажимаем кнопку «Войти»
+        // Нажимаем кнопку «Войти» — Tab до кнопки, затем Enter
         const submitBtn = page
           .locator(
             'button[type="submit"], button.bg-blue-100, button:has-text("Войти")',
           )
           .first();
-        const submitBox = await submitBtn.boundingBox().catch(() => null);
-        if (submitBox) {
-          await page.mouse.move(
-            submitBox.x + submitBox.width / 2 + Math.random() * 6 - 3,
-            submitBox.y + submitBox.height / 2 + Math.random() * 4 - 2,
-            { steps: 10 },
-          );
+        const submitVisible = await submitBtn
+          .waitFor({ state: "visible", timeout: 5000 })
+          .then(() => true)
+          .catch(() => false);
+        if (submitVisible) {
+          await submitBtn.scrollIntoViewIfNeeded().catch(() => {});
           await delay(Math.random() * 400 + 200);
-          await submitBtn.click();
+          await submitBtn.click({ force: true });
         } else {
           await passField.press("Enter");
         }
+        console.log("[AuthManager] myhome: submit clicked");
 
         // Проверяем ошибку неправильного пароля/логина
         const errorPopup = page.locator("div.go3958317564").first();
