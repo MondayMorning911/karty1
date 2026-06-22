@@ -8,6 +8,7 @@ import { parseListingWithDeepSeek } from './server/ai.js';
 import { AuthManager } from './server/authManager.js';
 import { publishKorterAsync } from './server/korterPublisher.js';
 import { supabaseServer } from './server/supabase.js';
+import { parseListingText, executePortalPublishing } from './server/skyvernOrchestrator.js';
 import fs from 'fs';
 
 
@@ -171,6 +172,30 @@ echo "Steel Browser is running on port 8080"
     }
     publishMyhomeAsync(userId, objectId, text, photos);
     res.json({ status: 'started' });
+  });
+
+  app.post('/api/publish/auto', async (req, res) => {
+    const { userId, objectId, text, photos, portals } = req.body;
+    if (!userId || !objectId || !text || !portals) {
+      return res.status(400).json({ error: 'userId, objectId, text, and portals are required' });
+    }
+    
+    // Asynchronous background publishing
+    (async () => {
+        try {
+            console.log(`[Skyvern Auto] Parsing text for ${objectId}...`);
+            const payload = await parseListingText(text);
+            payload.photos = photos || [];
+            payload.portal_targets = portals; // Array<"korter.ge" | "myhome.ge" | "ss.ge" | "realting.com">
+            
+            console.log(`[Skyvern Auto] Starting execution for targets:`, portals);
+            await executePortalPublishing(userId, objectId, payload);
+        } catch (e: any) {
+            console.error(`[Skyvern Auto] Fatal background error:`, e);
+        }
+    })();
+
+    res.json({ status: 'started_auto_pipeline' });
   });
 
   // Parse Listing with deepseek

@@ -1,0 +1,24 @@
+version: "3.8"
+services:
+  skyvern:
+    image: skyvernai/skyvern:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # Use GitHub Models Azure endpoint (OpenAI compatible)
+      - LLM_PROVIDER=openai
+      - OPENAI_API_KEY=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
+      - OPENAI_BASE_URL=https://models.inference.ai.azure.com
+      - LLM_MODEL=gpt-4o-mini
+      
+      - BROWSER_TYPE=chromium
+      - MAX_SCRAPING_RETRIES=3
+    volumes:
+      - ./cookies:/app/cookies
+      - ./screenshots:/app/screenshots
+      - ./downloads:/app/downloads
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: "3.5"
