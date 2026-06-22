@@ -150,7 +150,7 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   );
 }
 
-function CreateTab({ 
+export function CreateTab({ 
   uid, navigateToPlatforms, 
   descState, styleState, photosState, parsedDataState, addressCoordsState
 }: { 

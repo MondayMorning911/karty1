@@ -1,7 +1,7 @@
-import TelegramBot from "node-telegram-bot-api";
-import { HttpsProxyAgent } from "https-proxy-agent";
-import { SocksProxyAgent } from "socks-proxy-agent";
-import dotenv from "dotenv";
+import TelegramBot from 'node-telegram-bot-api';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
+import dotenv from 'dotenv';
 dotenv.config();
 
 // Usually Telegram token from env, or fallback to the one user provided
@@ -17,9 +17,9 @@ export function startBot() {
 
   const proxyUrl = process.env.TELEGRAM_PROXY_URL;
   let requestOpts: any = undefined;
-
+  
   if (proxyUrl) {
-    if (proxyUrl.startsWith("socks")) {
+    if (proxyUrl.startsWith('socks')) {
       requestOpts = { agent: new SocksProxyAgent(proxyUrl) };
     } else {
       requestOpts = { proxy: proxyUrl };
@@ -28,12 +28,12 @@ export function startBot() {
   }
 
   // Create a bot that uses 'polling' to fetch new updates
-  bot = new TelegramBot(token, {
+  bot = new TelegramBot(token, { 
     polling: true,
-    request: requestOpts,
+    request: requestOpts
   });
 
-  bot.on("polling_error", (error) => {
+  bot.on('polling_error', (error) => {
     console.error(`[Telegram Bot Polling Error]: ${error.message}`);
   });
 
@@ -46,36 +46,16 @@ export function startBot() {
   bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
 
-    bot?.sendMessage(
-      chatId,
-      "Добро пожаловать в Karty! 🚀\n\nМощный инструмент централизованной публикации на все доски недвижимости.\nНажмите кнопку ниже, чтобы открыть Mini App и авторизовать площадки.",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Открыть Karty", web_app: { url: appUrl } }],
-          ],
-        },
-      },
-    );
+    bot?.sendMessage(chatId, "Добро пожаловать в Karty! 🚀\n\nМощный инструмент централизованной публикации на все доски недвижимости.\nНажмите кнопку ниже, чтобы открыть Mini App и авторизовать площадки.", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Открыть Karty", web_app: { url: appUrl } }]
+        ]
+      }
+    });
   });
 
-  bot.on("polling_error", (error) => {
+  bot.on('polling_error', (error) => {
     console.log("Telegram Bot Polling Error:", error);
   });
-}
-
-// Отправить сообщение пользователю по его Telegram chat_id
-export async function sendBotMessage(
-  chatId: string | number,
-  message: string,
-): Promise<void> {
-  if (!bot) {
-    console.warn("[Bot] sendBotMessage: bot not initialized, skipping.");
-    return;
-  }
-  try {
-    await bot.sendMessage(chatId, message, { parse_mode: "HTML" });
-  } catch (e: any) {
-    console.error(`[Bot] sendBotMessage error (chatId=${chatId}):`, e.message);
-  }
 }

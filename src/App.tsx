@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { LandingPage } from "./pages/LandingPage";
 import { MiniApp } from "./pages/MiniApp";
 import { Crm } from "./pages/Crm";
+import { VideoExport } from "./pages/VideoExport";
 import { useEffect, useState } from "react";
 
 function RootRoute({ theme, toggleTheme }: { theme: 'light' | 'dark', toggleTheme: () => void }) {
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/" element={<RootRoute theme={theme} toggleTheme={toggleTheme} />} />
         <Route path="/app/*" element={<MiniApp theme={theme} toggleTheme={toggleTheme} />} />
         <Route path="/crm/*" element={<Crm />} />
+        <Route path="/video" element={<VideoExport />} />
       </Routes>
     </BrowserRouter>
   );
