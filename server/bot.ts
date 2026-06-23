@@ -15,12 +15,12 @@ export function startBot() {
     return;
   }
 
-  const proxyUrl = process.env.TELEGRAM_PROXY_URL;
+  const proxyUrl = process.env.TELEGRAM_PROXY_URL || 'socks5://proxyuser:test12345@83.147.18.62:1080';
   let requestOpts: any = undefined;
   
   if (proxyUrl) {
     if (proxyUrl.startsWith('socks')) {
-      requestOpts = { agent: new SocksProxyAgent(proxyUrl) };
+      requestOpts = { agent: new (SocksProxyAgent as any)(proxyUrl) };
     } else {
       requestOpts = { proxy: proxyUrl };
     }

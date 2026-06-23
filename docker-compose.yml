@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   skyvern:
-    image: skyvernai/skyvern:latest
+    image: public.ecr.aws/skyvern/skyvern:latest
     ports:
       - "8000:8000"
     environment:
@@ -17,8 +17,29 @@ services:
       - ./cookies:/app/cookies
       - ./screenshots:/app/screenshots
       - ./downloads:/app/downloads
+      - ./artifacts:/data/artifacts
+      - ./videos:/data/videos
+      - ./har:/data/har
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 5G
           cpus: "3.5"
+
+  skyvern-ui:
+    image: public.ecr.aws/skyvern/skyvern-ui:latest
+    restart: on-failure
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - ./artifacts:/data/artifacts
+      - ./videos:/data/videos
+      - ./har:/data/har
+    environment:
+      - VITE_BROWSER_STREAMING_MODE=cdp
+      - VITE_WSS_BASE_URL=ws://79.143.190.33:8000/api/v1
+      - VITE_API_BASE_URL=http://79.143.190.33:8000/api/v1
+      - VITE_ARTIFACT_API_BASE_URL=http://79.143.190.33:9090
+    depends_on:
+      - skyvern

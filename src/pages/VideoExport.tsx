@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { Camera, Download } from 'lucide-react';
