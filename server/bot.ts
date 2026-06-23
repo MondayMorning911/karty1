@@ -15,24 +15,11 @@ export function startBot() {
     return;
   }
 
-  const proxyUrl = process.env.TELEGRAM_PROXY_URL;
-  let requestOpts: any = undefined;
-  
-  if (proxyUrl && proxyUrl !== 'none' && proxyUrl !== 'false') {
-    if (proxyUrl.startsWith('socks')) {
-      requestOpts = { agent: new (SocksProxyAgent as any)(proxyUrl) };
-    } else {
-      requestOpts = { proxy: proxyUrl };
-    }
-    console.log(`Using proxy for Telegram Bot: ${proxyUrl}`);
-  } else {
-    console.log(`Starting Telegram Bot without proxy.`);
-  }
+  console.log(`Starting Telegram Bot without proxy.`);
 
   // Create a bot that uses 'polling' to fetch new updates
   bot = new TelegramBot(token, { 
-    polling: true,
-    request: requestOpts
+    polling: true
   });
 
   bot.on('polling_error', (error) => {

@@ -208,7 +208,7 @@ async function runSkyvernTask(task: SkyvernTask) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            // 'x-api-key': process.env.SKYVERN_API_KEY || ''
+            'x-api-key': process.env.SKYVERN_API_KEY || ''
         },
         body: JSON.stringify(task)
     });
