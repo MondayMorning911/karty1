@@ -1,17 +1,39 @@
 version: "3.8"
 services:
+  postgres:
+    image: postgres:14-alpine
+    restart: always
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - POSTGRES_USER=skyvern
+      - POSTGRES_PASSWORD=skyvern
+      - POSTGRES_DB=skyvern
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skyvern"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   skyvern:
     image: public.ecr.aws/skyvern/skyvern:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8000:8000"
     environment:
+      - DATABASE_STRING=postgresql+psycopg://skyvern:skyvern@postgres:5432/skyvern
       # Use GitHub Models Azure endpoint (OpenAI compatible)
       - LLM_PROVIDER=openai
       - OPENAI_API_KEY=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
       - OPENAI_BASE_URL=https://models.inference.ai.azure.com
       - LLM_MODEL=gpt-4o-mini
       
-      - BROWSER_TYPE=chromium
+      - BROWSER_TYPE=chromium-headful
+      - BROWSER_STREAMING_MODE=cdp
+      - BROWSER_CDP_CONNECT_TIMEOUT_MS=120000
       - MAX_SCRAPING_RETRIES=3
     volumes:
       - ./cookies:/app/cookies
@@ -20,6 +42,7 @@ services:
       - ./artifacts:/data/artifacts
       - ./videos:/data/videos
       - ./har:/data/har
+      - ./.skyvern:/app/.skyvern
     deploy:
       resources:
         limits:
@@ -36,6 +59,7 @@ services:
       - ./artifacts:/data/artifacts
       - ./videos:/data/videos
       - ./har:/data/har
+      - ./.skyvern:/app/.skyvern
     environment:
       - VITE_BROWSER_STREAMING_MODE=cdp
       - VITE_WSS_BASE_URL=ws://79.143.190.33:8000/api/v1
