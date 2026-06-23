@@ -31,6 +31,7 @@ services:
       - OPENAI_BASE_URL=https://models.inference.ai.azure.com
       - LLM_MODEL=gpt-4o-mini
       
+      - SKYVERN_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJrYXJ0eS1sb2NhbC1vcmctaWQiLCJleHAiOjIwOTc2MTQ3NzksImlhdCI6MTc4MjI1NDc3OX0.zmhEJ-s7QguLTiHAB9qslOe7F7WmSFefvJE9S2DQ820
       
       - BROWSER_TYPE=chromium-headful
       - BROWSER_STREAMING_MODE=cdp
@@ -66,5 +67,6 @@ services:
       - VITE_WSS_BASE_URL=ws://79.143.190.33:8000/api/v1
       - VITE_API_BASE_URL=http://79.143.190.33:8000/api/v1
       - VITE_ARTIFACT_API_BASE_URL=http://79.143.190.33:9090
+      - VITE_SKYVERN_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJrYXJ0eS1sb2NhbC1vcmctaWQiLCJleHAiOjIwOTc2MTQ3NzksImlhdCI6MTc4MjI1NDc3OX0.zmhEJ-s7QguLTiHAB9qslOe7F7WmSFefvJE9S2DQ820
     depends_on:
       - skyvern

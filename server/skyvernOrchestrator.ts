@@ -208,7 +208,7 @@ async function runSkyvernTask(task: SkyvernTask) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': process.env.SKYVERN_API_KEY || ''
+            'x-api-key': process.env.SKYVERN_API_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJrYXJ0eS1sb2NhbC1vcmctaWQiLCJleHAiOjIwOTc2MTQ3NzksImlhdCI6MTc4MjI1NDc3OX0.zmhEJ-s7QguLTiHAB9qslOe7F7WmSFefvJE9S2DQ820'
         },
         body: JSON.stringify(task)
     });
