@@ -31,6 +31,8 @@ services:
       - OPENAI_BASE_URL=https://models.inference.ai.azure.com
       - LLM_MODEL=gpt-4o-mini
       
+      - SKYVERN_API_KEY=skyvern_secret_key
+      
       - BROWSER_TYPE=chromium-headful
       - BROWSER_STREAMING_MODE=cdp
       - BROWSER_CDP_CONNECT_TIMEOUT_MS=120000
@@ -65,5 +67,6 @@ services:
       - VITE_WSS_BASE_URL=ws://79.143.190.33:8000/api/v1
       - VITE_API_BASE_URL=http://79.143.190.33:8000/api/v1
       - VITE_ARTIFACT_API_BASE_URL=http://79.143.190.33:9090
+      - VITE_SKYVERN_API_KEY=skyvern_secret_key
     depends_on:
       - skyvern
