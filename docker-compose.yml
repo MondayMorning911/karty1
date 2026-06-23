@@ -31,6 +31,7 @@ services:
       - OPENAI_BASE_URL=https://models.inference.ai.azure.com
       - LLM_MODEL=gpt-4o-mini
       
+      - ALLOWED_ORIGINS=["http://79.143.190.33:8080"]
       - SKYVERN_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJrYXJ0eS1sb2NhbC1vcmctaWQiLCJleHAiOjIwOTc2MTQ3NzksImlhdCI6MTc4MjI1NDc3OX0.zmhEJ-s7QguLTiHAB9qslOe7F7WmSFefvJE9S2DQ820
       
       - BROWSER_TYPE=chromium-headful
