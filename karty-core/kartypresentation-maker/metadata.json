@@ -1,0 +1,8 @@
+{
+  "name": "Karty - Presentation Maker",
+  "description": "Telegram Mini App template for creating real estate presentations",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

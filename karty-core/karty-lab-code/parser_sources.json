@@ -1,0 +1,30 @@
+{
+  "korter": {
+    "sort_param": "sort=update_time_desc",
+    "urls": [
+      "https://korter.ge/ru/продажа-квартир-тбилиси",
+      "https://korter.ge/ru/продажа-квартир-батуми",
+      "https://korter.ge/ru/продажа-домов-батуми",
+      "https://korter.ge/ru/продажа-домов-тбилиси",
+      "https://korter.ge/ru/продажа-коммерческой-недвижимости-тбилиси",
+      "https://korter.ge/ru/продажа-коммерческой-недвижимости-батуми",
+      "https://korter.ge/ru/продажа-земельных-участков-батуми",
+      "https://korter.ge/ru/продажа-земельных-участков-тбилиси",
+      "https://korter.ge/ru/аренда-квартир-тбилиси",
+      "https://korter.ge/ru/аренда-квартир-батуми",
+      "https://korter.ge/ru/аренда-коммерческой-недвижимости-батуми",
+      "https://korter.ge/ru/аренда-коммерческой-недвижимости-тбилиси"
+    ]
+  },
+  "ssge": {
+    "sort_param": "order=1",
+    "urls": [
+      "https://home.ss.ge/ru/недвижимость/l/Квартира/Продается?currencyId=1&page=1&order=1",
+      "https://home.ss.ge/ru/недвижимость/l/Земельный-участок/Продается?currencyId=1&advancedSearch=%7B%22landType%22%3Anull%7D&order=1",
+      "https://home.ss.ge/ru/недвижимость/l/Дом/Продается?currencyId=1&order=1",
+      "https://home.ss.ge/ru/недвижимость/l/Комерческая-площадь/Продается?currencyId=1&order=1",
+      "https://home.ss.ge/ru/недвижимость/l/Квартира/Аренда?currencyId=1&order=1",
+      "https://home.ss.ge/ru/недвижимость/l/Квартира/Аренда--за-день?currencyId=1&order=1"
+    ]
+  }
+}

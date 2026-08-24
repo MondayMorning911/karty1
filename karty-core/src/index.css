@@ -1,0 +1,306 @@
+@import "tailwindcss";
+@variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  :root {
+    --tg-viewport-height: 100dvh;
+  }
+
+  body {
+    @apply bg-[#f6f9fc] dark:bg-[#050505] text-[#425466] dark:text-gray-300;
+  }
+  ::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .field {
+    @apply w-full px-3 py-2.5 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 rounded-xl text-[12px] outline-none focus:border-[#533afd];
+  }
+  .upload {
+    @apply flex items-center justify-center gap-2 w-full px-3 py-3 bg-slate-50 dark:bg-white/[0.04] border border-dashed border-slate-300 dark:border-white/10 rounded-xl text-[12px] text-slate-500 cursor-pointer;
+  }
+  .upload input { display: none; }
+  @keyframes slideRight {
+    0% { transform: translateX(-100%); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateX(200%); opacity: 0; }
+  }
+  @keyframes slideLeft {
+    0% { transform: translateX(100vw); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateX(-100vw); opacity: 0; }
+  }
+  @keyframes jump {
+    0%, 100% { transform: translateY(0) scale(1.05); }
+    50% { transform: translateY(-15px) scale(0.95); }
+  }
+  @keyframes spin-slow {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .animate-slide-right-1 {
+    animation: slideRight 14s linear infinite;
+  }
+  .animate-slide-right-2 {
+    animation: slideRight 18s linear infinite 2s;
+  }
+  .animate-slide-right-3 {
+    animation: slideRight 22s linear infinite 5s;
+  }
+  .animate-slide-left-key-1 {
+    animation: slideLeft 4s linear infinite;
+  }
+  .animate-slide-left-key-2 {
+    animation: slideLeft 5s linear infinite 2s;
+  }
+  .animate-jump {
+    animation: jump 1s ease-in-out infinite;
+  }
+  .animate-spin-slow {
+    animation: spin-slow 8s linear infinite;
+  }
+}
+
+/* Telegram can report a wide CSS viewport on mobile. Use the actual visual
+   viewport class instead of relying only on a width media query. */
+.mini-telegram-app,
+.mini-telegram-app .mini-app-shell {
+  height: var(--tg-viewport-height) !important;
+  max-height: var(--tg-viewport-height);
+}
+
+.mini-telegram-app .mini-publish-bar {
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+}
+
+.mini-telegram-app.mini-keyboard-open .mini-bottom-bar {
+  display: none;
+}
+
+.mini-telegram-app.mini-keyboard-open .mini-publish-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: max(env(safe-area-inset-bottom), calc(100vh - var(--tg-viewport-height)));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(246, 249, 252, 0.98), rgba(246, 249, 252, 0.9), transparent);
+}
+
+.dark .mini-telegram-app.mini-keyboard-open .mini-publish-bar {
+  background: linear-gradient(to top, rgba(5, 5, 5, 0.98), rgba(5, 5, 5, 0.9), transparent);
+}
+
+@media (max-width: 767px) {
+  .mini-app-root,
+  .mini-app-shell {
+    height: var(--tg-viewport-height) !important;
+    max-height: var(--tg-viewport-height);
+  }
+
+  .mini-app-root .mini-publish-bar {
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  }
+
+  .mini-keyboard-open .mini-bottom-bar {
+    display: none;
+  }
+
+  .mini-keyboard-open .mini-publish-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: max(env(safe-area-inset-bottom), calc(100vh - var(--tg-viewport-height)));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(246, 249, 252, 0.98), rgba(246, 249, 252, 0.9), transparent);
+  }
+
+  .dark .mini-keyboard-open .mini-publish-bar {
+    background: linear-gradient(to top, rgba(5, 5, 5, 0.98), rgba(5, 5, 5, 0.9), transparent);
+  }
+
+  .crm-shell {
+    min-height: 100dvh;
+  }
+
+  .crm-topbar {
+    min-height: 56px;
+    height: auto;
+    padding: 0.75rem 1rem;
+  }
+
+  .crm-topbar h1 {
+    font-size: 1rem;
+  }
+
+  .crm-topbar .relative {
+    display: none;
+  }
+
+  .crm-content {
+    padding: 1rem 1rem 5.5rem !important;
+  }
+
+  .crm-content > div {
+    max-width: none;
+  }
+
+  .crm-mobile-nav {
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+  }
+
+  .crm-leads-head {
+    display: none !important;
+  }
+
+  .crm-content [class*="grid-cols-[1fr_150px_120px_150px]"] {
+    display: block;
+    padding: 0.9rem 1rem;
+  }
+
+  .crm-content [class*="grid-cols-[1fr_150px_120px_150px]"] > * {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.45rem;
+  }
+
+  .crm-content [class*="grid-cols-[1fr_150px_120px_150px]"] > *:last-child {
+    margin-bottom: 0;
+  }
+
+  .crm-content [class*="grid-cols-[1fr_150px_120px_150px]"] button {
+    width: 100%;
+  }
+
+  .crm-parser-table {
+    display: block;
+  }
+
+  .crm-parser-table thead {
+    display: none;
+  }
+
+  .crm-parser-table tbody,
+  .crm-parser-table tr,
+  .crm-parser-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .crm-parser-table tr {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e5edf5;
+  }
+
+  .crm-parser-table td {
+    padding: 0.2rem 0 !important;
+  }
+
+  .crm-parser-table td::before {
+    display: inline-block;
+    width: 6.5rem;
+    color: #64748d;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .crm-parser-table td:nth-child(1)::before { content: "Имя"; }
+  .crm-parser-table td:nth-child(2)::before { content: "Телефон"; }
+  .crm-parser-table td:nth-child(3)::before { content: "Сайт"; }
+  .crm-parser-table td:nth-child(4)::before { content: "Объявления"; }
+
+  .crm-leads-main-table thead {
+    display: none;
+  }
+
+  .crm-leads-main-table,
+  .crm-leads-main-table tbody,
+  .crm-leads-main-table tr,
+  .crm-leads-main-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .crm-leads-main-table tr {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e5edf5;
+  }
+
+  .crm-leads-main-table td {
+    padding: 0.25rem 0 !important;
+  }
+
+  .crm-leads-main-table td::before {
+    display: inline-block;
+    width: 5.5rem;
+    color: #64748d;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+  }
+
+  .crm-leads-main-table td:nth-child(1)::before { content: "Источник"; }
+  .crm-leads-main-table td:nth-child(2)::before { content: "Контакт"; }
+  .crm-leads-main-table td:nth-child(3)::before { content: "Объявления"; }
+  .crm-leads-main-table td:nth-child(4)::before { content: "Статус"; }
+  .crm-leads-main-table td:nth-child(5)::before { content: "Действия"; }
+
+  .crm-leads-main-table td:nth-child(5) > div {
+    justify-content: flex-start;
+    opacity: 1;
+  }
+
+  .crm-telegram-head {
+    display: none;
+  }
+
+  .crm-telegram-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.45rem;
+  }
+
+  .crm-telegram-row > div {
+    grid-column: span 1 !important;
+    min-width: 0;
+  }
+
+  .crm-telegram-row > div:nth-child(1) {
+    grid-column: span 2 !important;
+  }
+
+  .crm-chat-list {
+    width: 100%;
+    border-right: 0;
+  }
+
+  .crm-chat-list-selected {
+    display: none;
+  }
+
+  .crm-chat-window {
+    width: 100%;
+  }
+
+  .crm-chat-window .max-w-\[75\%\] {
+    max-width: 88%;
+  }
+
+  .crm-content h2 {
+    font-size: 1.1rem;
+  }
+
+  .crm-content p {
+    max-width: 100%;
+  }
+}

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+  function oklchToRgb(colorStr) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = colorStr;
+    ctx.fillRect(0, 0, 1, 1);
+    const data = ctx.getImageData(0, 0, 1, 1).data;
+    return `rgb(${data[0]}, ${data[1]}, ${data[2]})`;
+  }
+  console.log(oklchToRgb('oklch(0.5 0.2 250)'));
+</script>
+</body>
+</html>

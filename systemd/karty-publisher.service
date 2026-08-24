@@ -1,0 +1,22 @@
+[Unit]
+Description=Karty application gateway and publisher
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/karty-lab/karty-core
+Environment=NODE_ENV=production
+Environment=PATH=/root/karty-lab/karty-core/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/root/karty-lab/karty-core/node_modules/.bin/tsx server.ts
+KillMode=control-group
+TimeoutStopSec=30
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

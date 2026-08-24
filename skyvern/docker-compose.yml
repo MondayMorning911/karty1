@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: karty-skyvern-postgres
+    restart: unless-stopped
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: skyvern
+      POSTGRES_PASSWORD: skyvern-local-only
+      POSTGRES_DB: skyvern
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skyvern -d skyvern"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  skyvern:
+    image: public.ecr.aws/skyvern/skyvern:latest
+    container_name: karty-skyvern
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8010:8000"
+    environment:
+      DATABASE_STRING: postgresql+psycopg://skyvern:skyvern-local-only@postgres:5432/skyvern
+      ENV: local
+      PORT: 8000
+      LOG_LEVEL: INFO
+      BROWSER_TYPE: chromium-headful
+      BROWSER_STREAMING_MODE: cdp
+      MAX_STEPS_PER_RUN: 50
+      BROWSER_ACTION_TIMEOUT_MS: 10000
+      DOWNLOAD_PATH: /app/downloads
+      BROWSER_SESSION_BASE_PATH: /data/browser_sessions
+      ENABLE_LOCAL_CREDENTIAL_VAULT: "true"
+      LOCAL_CREDENTIAL_VAULT_PATH: /data/credential_vault
+      ENABLE_CODE_BLOCK: "true"
+      ENABLE_LOG_ARTIFACTS: "false"
+      SKYVERN_TELEMETRY: "false"
+      ENABLE_OPENAI_COMPATIBLE: "false"
+      OPENAI_COMPATIBLE_MODEL_NAME: deepseek-chat
+      OPENAI_COMPATIBLE_API_KEY: ${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY must be available in the Karty env file}
+      OPENAI_COMPATIBLE_API_BASE: https://api.deepseek.com/v1
+      ENABLE_GEMINI: "true"
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY must be available in the Karty env file}
+      LLM_KEY: GEMINI_3.0_FLASH
+      SECONDARY_LLM_KEY: GEMINI_3.0_FLASH
+      ENABLE_OPENAI: "false"
+      ENABLE_ANTHROPIC: "false"
+      ENABLE_OLLAMA: "false"
+    volumes:
+      - ./artifacts:/data/artifacts
+      - ./videos:/data/videos
+      - ./har:/data/har
+      - ./log:/data/log
+      - ./browser_sessions:/data/browser_sessions
+      - ./credential_vault:/data/credential_vault
+      - ./.skyvern:/app/.skyvern
+      - /root/karty-lab/karty-core/cookies:/app/cookies:ro
+      - /root/karty-lab/karty-core/downloads:/app/downloads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/heartbeat', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 180s

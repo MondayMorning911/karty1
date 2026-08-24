@@ -1,0 +1,11 @@
+camoufox[geoip]
+playwright
+browser-use
+openai
+xvfbwrapper
+fastapi
+uvicorn[standard]
+python-multipart
+httpx
+python-dotenv
+telethon

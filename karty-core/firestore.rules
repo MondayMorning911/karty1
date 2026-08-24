@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidListing(data) {
+      return data.keys().hasAll(['userId', 'title', 'desc', 'status'])
+        && data.userId == request.auth.uid
+        && data.title is string && data.title.size() <= 200
+        && data.desc is string && data.desc.size() <= 5000
+        && data.status in ['published', 'draft', 'error']
+        && data.get('date', '') is string
+        && data.get('image', '') is string
+        && data.get('platforms', []) is list;
+    }
+
+    match /listings/{listingId} {
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() 
+        && isValidId(listingId)
+        && isValidListing(incoming());
+        
+      allow update: if isSignedIn()
+        && isValidId(listingId)
+        && existing().userId == request.auth.uid
+        && isValidListing(incoming())
+        && incoming().userId == existing().userId;
+
+      allow delete: if isSignedIn()
+        && existing().userId == request.auth.uid;
+    }
+  }
+}

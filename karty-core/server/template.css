@@ -1,0 +1,210 @@
+/* Presentation Template CSS — CSS Custom Properties for theming */
+:root {
+  --primary: #1a1a2e;
+  --secondary: #16213e;
+  --accent: #0f3460;
+  --text: #ffffff;
+  --text-muted: rgba(255,255,255,0.6);
+  --card-bg: rgba(255,255,255,0.08);
+  --card-border: rgba(255,255,255,0.12);
+  --font-heading: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.15);
+  --page-w: 210mm;
+  --page-h: 297mm;
+  --pad: 20mm;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  width: var(--page-w);
+  min-height: var(--page-h);
+  padding: var(--pad);
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+  background: linear-gradient(145deg, var(--secondary) 0%, var(--primary) 100%);
+}
+.page:last-child { page-break-after: auto; }
+
+/* ── Cover Page ── */
+.cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 16px;
+}
+.cover .logo {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-weight: 700;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  overflow: hidden;
+}
+.cover .logo img { width: 100%; height: 100%; object-fit: cover; }
+.cover h1 { font-family: var(--font-heading); font-size: 32px; font-weight: 700; line-height: 1.2; }
+.cover .subtitle { font-size: 16px; color: var(--text-muted); margin-top: 4px; }
+.cover .badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 20px; border-radius: 24px;
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  font-size: 14px; font-weight: 500;
+  backdrop-filter: blur(8px);
+}
+
+/* ── Object Page ── */
+.obj-page { display: flex; flex-direction: column; gap: 16px; }
+
+.obj-header {
+  display: flex; align-items: center; gap: 12px;
+}
+.obj-num {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--accent); color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 15px; flex-shrink: 0;
+}
+.obj-title { font-family: var(--font-heading); font-size: 22px; font-weight: 700; line-height: 1.2; }
+.obj-type { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+/* Photo grid */
+.photo-grid {
+  display: grid;
+  gap: 8px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.photo-grid.photos-1 { grid-template-columns: 1fr; }
+.photo-grid.photos-2 { grid-template-columns: 1fr 1fr; }
+.photo-grid.photos-3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; }
+.photo-grid.photos-3 .photo:first-child { grid-row: 1 / 3; }
+.photo-grid.photos-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.photo-grid.photos-5 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; }
+.photo-grid.photos-5 .photo:first-child { grid-row: 1 / 3; }
+
+.photo {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  min-height: 100px;
+}
+.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Parameters table */
+.params {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.param {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(4px);
+}
+.param .icon {
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.param .label { font-size: 11px; color: var(--text-muted); }
+.param .value { font-size: 14px; font-weight: 600; }
+
+/* Features / badges */
+.features {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.feature {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  font-size: 12px; font-weight: 500;
+  backdrop-filter: blur(4px);
+}
+.feature .icon { width: 14px; height: 14px; color: var(--accent); }
+
+/* Description */
+.obj-desc {
+  font-size: 13px; line-height: 1.6;
+  color: var(--text-muted);
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+
+/* ── Contact Page ── */
+.contact-page {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; gap: 20px;
+}
+.contact-page .realtor-photo {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid var(--accent);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.contact-page .realtor-photo img { width: 100%; height: 100%; object-fit: cover; }
+.contact-page h2 { font-family: var(--font-heading); font-size: 24px; font-weight: 700; }
+.contact-page .position { font-size: 14px; color: var(--text-muted); }
+.contact-page .agency { font-size: 16px; font-weight: 600; margin-top: 8px; }
+.contact-page .phone {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 24px;
+  background: var(--accent);
+  border-radius: 24px;
+  font-size: 18px; font-weight: 600;
+  margin-top: 12px;
+}
+.contact-page .watermark { font-size: 12px; color: var(--text-muted); margin-top: 20px; }
+
+/* ── Footer on every page ── */
+.page-footer {
+  position: absolute; bottom: var(--pad); left: var(--pad); right: var(--pad);
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--card-border);
+  font-size: 10px; color: var(--text-muted);
+}
+
+/* ── Compact layout (4-5 objects) ── */
+.compact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.compact-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.compact-card .photo { height: 120px; }
+.compact-card .info { padding: 10px; }
+.compact-card .info h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.compact-card .info p { font-size: 11px; color: var(--text-muted); }
+.compact-card .info .price { font-size: 14px; font-weight: 700; color: var(--text); margin-top: 4px; }

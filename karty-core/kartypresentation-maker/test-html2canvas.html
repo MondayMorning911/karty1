@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+<div id="test" class="bg-slate-50 text-slate-500">Test</div>
+<script>
+  setTimeout(() => {
+    html2canvas(document.getElementById('test')).then(canvas => {
+      console.log('Success');
+    }).catch(e => {
+      console.error('Error:', e);
+    });
+  }, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+=============================================================
+  KARTY PUBLISHER API — СПРАВОЧНИК API
+=============================================================
+
+Сервер: http://localhost:8000
+Документация: http://localhost:8000/docs (Swagger UI)
+
+=============================================================
+1. HEALTH CHECK
+=============================================================
+
+GET /api/health
+
+Response:
+  {"status": "ok"}
+
+-------------------------------------------------------------
+2. ЗАГРУЗКА COOKIES
+-------------------------------------------------------------
+
+POST /api/cookies/{user_id}/{site}
+
+Параметры:
+  user_id  — ID пользователя Telegram (строка)
+  site     — ss_ge | myhome_ge | korter_ge
+
+Request body: JSON массив cookies (из браузерного экспорта)
+
+Example:
+  curl -X POST http://localhost:8000/api/cookies/tg_123/ss_ge \
+    -H "Content-Type: application/json" \
+    -d @cookies/ss_ge.json
+
+Response:
+  {"status": "ok", "user_id": "tg_123", "site": "ss_ge", "count": 34}
+
+-------------------------------------------------------------
+3. ПУБЛИКАЦИЯ ОБЪЯВЛЕНИЯ
+-------------------------------------------------------------
+
+POST /api/publish
+
+Request body:
+{
+  "user_id": "tg_12345",
+  "sites": ["ss_ge", "myhome_ge", "korter_ge"],
+  "listing": {
+    "deal": "sale",
+    "type": "apartment",
+    "price": 95000,
+    "currency": "USD",
+    "area": 72,
+    "rooms": 2,
+    "bedrooms": 1,
+    "floor": 4,
+    "floors_total": 12,
+    "address": "Тбилиси, ул. Руставели 28",
+    "city": "Тбилиси",
+    "description": "Продаётся квартира...",
+    "photo_urls": ["https://res.cloudinary.com/.../photo.jpg"],
+    "contact_name": "Даниэль"
+  }
+}
+
+Обязательные поля listing:
+  deal         — "sale" | "rent"
+  type         — "apartment" | "house" | "land" | "commercial"
+  price        — цена (число)
+  area         — площадь (число)
+  address      — адрес (строка)
+  city         — город (строка)
+  description  — описание (строка)
+  contact_name — имя контакта (строка)
+
+Опциональные поля:
+  currency     — "USD" (по умолчанию)
+  rooms        — кол-во комнат (квартиры, дома, коммерция)
+  bedrooms     — кол-во спален (квартиры, дома)
+  floor        — этаж (квартиры, коммерция)
+  floors_total — этажность (квартиры, дома, коммерция)
+  yard_area    — площадь двора (обязательно для домов на ss.ge)
+  photo_urls   — массив URL фото (Cloudinary)
+  contact_phone — телефон
+
+Response:
+  {"task_id": "abc123", "status": "processing"}
+
+-------------------------------------------------------------
+4. ПРОВЕРКА СТАТУСА
+-------------------------------------------------------------
+
+GET /api/publish/{task_id}
+
+Response:
+{
+  "task_id": "abc123",
+  "status": "completed",
+  "results": {
+    "ss_ge": {"status": "success", "url": "https://home.ss.ge/ru/l/36031374"},
+    "myhome_ge": {"status": "success", "url": "https://..."},
+    "korter_ge": {"status": "failed", "error": "Street not found"}
+  }
+}
+
+Статусы задачи:
+  processing — выполняется
+  completed  — завершено
+  failed     — ошибка
+
+Статусы сайтов:
+  success — опубликовано, url содержит ссылку на объявление
+  failed  — ошибка, error содержит описание
+
+=============================================================
+ИНТЕГРАЦИЯ С NODE.JS
+=============================================================
+
+const PYTHON_API = 'http://localhost:8000';
+
+// Публикация
+const resp = await fetch(`${PYTHON_API}/api/publish`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ user_id, sites, listing })
+});
+const { task_id } = await resp.json();
+
+// Polling каждые 5 секунд
+const status = await fetch(`${PYTHON_API}/api/publish/${task_id}`);
+const result = await status.json();
+
+=============================================================
+ЗАПУСК
+=============================================================
+
+# Ручной
+xvfb-run --auto-servernum --server-args="-screen 0 1280x900x24" \
+  python3 run_api.py
+
+# systemd
+cp systemd/karty-publisher.service /etc/systemd/system/
+systemctl enable --now karty-publisher
+
+=============================================================
+ТРЕБОВАНИЯ
+=============================================================
+
+- Python 3.10+
+- Linux (Xvfb + Chromium)
+- ~2GB RAM
+- Зависимости: fastapi, uvicorn, playwright, httpx
+
+=============================================================
+ПОДДЕРЖИВАЕМЫЕ КАТЕГОРИИ
+=============================================================
+
+Тип            | Продажа | Аренда
+---------------|---------|--------
+Квартира       |    ✅   |   ✅
+Дом            |    ✅   |   ✅
+Участок        |    ✅   |   ✅
+Коммерция      |    ✅   |   ✅
+
+=============================================================
+ПОДДЕРЖИВАЕМЫЕ САЙТЫ
+=============================================================
+
+Сайт     | Статус | Заметки
+---------|--------|--------
+ss.ge    |   ✅   | Дома требуют yard_area
+myhome   |   ✅   | Коммерция требует rooms
+korter   |   ✅   | Минимум 3 фото
+
+=============================================================
+ФАЙЛЫ ДЛЯ ИНТЕГРАЦИИ
+=============================================================
+
+api/                     — FastAPI микросервис (весь API)
+sites/                   — Логика публикации (Playwright)
+cookies/{user_id}/       — Cookies по пользователям
+run_api.py               — Точка запуска сервера
+requirements.txt         — Зависимости Python
+systemd/                 — Конфиг автозапуска

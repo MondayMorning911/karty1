@@ -1,0 +1,87 @@
+# Realators — 2026-07-03T13:09:48.643315
+# Total: 84 (korter:51 myhome:14 ssge:19)
+
+593720470       myhome   Unknown                             https://www.myhome.ge/ru/s/?users=5449648&CardView=2
+551199637       korter   Khatia                              https://korter.ge/ru/realtor/72855?section=sale&property_cat
+511154595       korter   Elite Estate Tbilisi                https://korter.ge/ru/realtor/62398?section=rent&property_cat
+511186491       korter   Giga Benia                          https://korter.ge/ru/realtor/74573?section=rent&property_cat
+500059639       korter   Kristina | Premium Real Estate Cons https://korter.ge/ru/realtor/84629?section=rent&property_cat
+555071414       korter   მეგი                                https://korter.ge/ru/realtor/75268?section=rent&property_cat
+557280841       korter   Qetevan mekeidze                    https://korter.ge/ru/realtor/109411?section=rent&property_ca
+579360008       korter   Юлия                                https://korter.ge/ru/realtor/60216?section=rent&property_cat
+568684933       korter   ლიკა*Lika                           https://korter.ge/ru/realtor/82065?section=rent&property_cat
+597900077       korter   Dani Group                          https://korter.ge/ru/realtor/59944?section=rent&property_cat
+504443828       korter   Ангелина                            https://korter.ge/ru/realtor/81481?section=sale&property_cat
+595058820       korter   Adjara Home                         https://korter.ge/ru/realtor/106279?section=rent&property_ca
+571075354       korter   Shako                               https://korter.ge/ru/realtor/66292?section=rent&property_cat
+555319253       korter   ნინი                                https://korter.ge/ru/realtor/96291?section=rent&property_cat
+593754557       korter   Анна                                https://korter.ge/ru/realtor/56489?section=rent&property_cat
+599066401       korter   ÅLEX•BATUMÎ                         https://korter.ge/ru/realtor/62211?section=rent&property_cat
+558171785       korter   გიორგი ბერიძე                       https://korter.ge/ru/realtor/65671?section=sale&property_cat
+555325021       korter   მარიანა ხაბაძე                      https://korter.ge/ru/realtor/106177?section=rent&property_ca
+557989955       korter   Giorgi Chkhaidze                    https://korter.ge/ru/realtor/91782?section=rent&property_cat
+595851259       korter   Nini                                https://korter.ge/ru/realtor/48735?section=rent&property_cat
+531112827       korter   Tamara Bokuchava                    https://korter.ge/ru/realtor/52520
+565074656       korter   ლიკა*Lika                           https://korter.ge/ru/realtor/82065
+511201662       korter   ნონა (Nonna)                        https://korter.ge/ru/realtor/72817
+555209488       korter   Александра                          https://korter.ge/ru/realtor/40640
+511201661       korter   Tatiana Goglidze                    https://korter.ge/ru/realtor/44555
+542589743       korter   Анна Попова                         https://korter.ge/ru/realtor/52964
+599086171       korter   Тиа  Азyре                          https://korter.ge/ru/realtor/54530?section=rent&property_cat
+557309000       korter   ნათია                               https://korter.ge/ru/realtor/93212?section=rent&property_cat
+551088526       korter   Андрей Малыш                        https://korter.ge/ru/realtor/110366?section=rent&property_ca
+568515536       korter   Лилия                               https://korter.ge/ru/realtor/71444?section=rent&property_cat
+559934503       myhome   Сдается склад коммерческая площадь  
+559910695       myhome   Сдается 10+ комнатная частный дом в 
+551010112       myhome   Продается 2 комнатная квартира в ку 
+551122772       myhome   Сдается 5 комнатная квартира в ваке 
+577286627       korter   Oleg Vladimirovich                  https://korter.ge/ru/realtor/32371?section=rent&property_cat
+551599658       korter   ტატა                                https://korter.ge/ru/realtor/120027?section=rent&property_ca
+511144399       korter   Ihor Druchok                        https://korter.ge/ru/realtor/91866?section=rent&property_cat
+511103255       korter   Real Estate                         https://korter.ge/ru/realtor/88427?section=rent&property_cat
+599808222       korter   Unknown                             
+555994654       korter   Виктория                            https://korter.ge/ru/realtor/103503?section=rent&property_ca
+511148185       korter   Aleksandra Tsurkava Property        https://korter.ge/ru/realtor/107904?section=rent&property_ca
+551505015       korter   Unknown                             
+551049774       korter   Kira Ibragimova                     https://korter.ge/ru/realtor/85215?section=rent&property_cat
+511230966       korter   Katerina Sekerina                   https://korter.ge/ru/realtor/53584?section=rent&property_cat
+599290518       korter   Unknown                             
+574970101       korter   Unknown                             
+555352537       korter   აგენტი                              https://korter.ge/ru/realtor/76670?section=rent&property_cat
+559257775       myhome   Сдается 3 комнатная дача в цкнети   
+555579179       myhome   Продается 2 комнатная квартира в ди 
+559917262       myhome   Сдается склад коммерческая площадь  
+557798440       myhome   Продается 5 комнатная квартира в ди 
+557000131       myhome   Сдается 2 комнатная квартира в сабу 
+511105129       ssge     Unknown                             
+595914201       ssge     Unknown                             
+595363939       ssge     Unknown                             
+514802040       ssge     Unknown                             
+577164464       korter   Aleksandre                          https://korter.ge/ru/realtor/94073?section=rent&property_cat
+511120693       korter   Giorgi Capital Property             https://korter.ge/ru/realtor/106793?section=sale&property_ca
+544222849       korter   Кирилл                              https://korter.ge/ru/realtor/88734?section=rent&property_cat
+568104461       korter   Maria PLAN A - Real Estate Agency   https://korter.ge/ru/realtor/106796?section=sale&property_ca
+597789408       korter   მარიამი                             https://korter.ge/ru/realtor/113350?section=rent&property_ca
+591123119       korter   Oleg                                https://korter.ge/ru/realtor/112663?section=sale&property_ca
+514060502       korter   Nukri Beridze                       https://korter.ge/ru/realtor/92818?section=rent&property_cat
+511227727       korter   Iirakli                             https://korter.ge/ru/realtor/70087?section=rent&property_cat
+593743773       korter   mdx530                              https://korter.ge/ru/realtor/38853?section=rent&property_cat
+559134333       myhome   Продается 2 комнатная квартира в пл 
+555522240       myhome   Сдается 3 комнатная квартира в бату 
+559589476       myhome   Продается 3 комнатная квартира в ба 
+559909940       myhome   Продается 4 комнатная квартира в са 
+500102626       ssge     Unknown                             
+597762783       ssge     Unknown                             
+596300717       ssge     Unknown                             
+577110762       ssge     Unknown                             
+577011999       ssge     Unknown                             
+550509079       ssge     Unknown                             
+593554495       ssge     Unknown                             
+511166700       ssge     Unknown                             
+511102383       ssge     Unknown                             
+579096443       ssge     Unknown                             
+595507404       ssge     Unknown                             
+558306261       ssge     Unknown                             
+500094420       ssge     Unknown                             
+595140994       ssge     Unknown                             
+577235601       ssge     Unknown                             
