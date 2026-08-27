@@ -13,6 +13,10 @@ from urllib.parse import urlparse
 
 from api.cookie_manager import get_cookies, has_cookies, get_storage_state, save_storage_state
 
+import sys
+sys.path.insert(0, "/root/karty-lab/karty-core/karty-lab-code")
+from db import get_connection as _get_db
+
 SITE_CLASSES = {
     "ss_ge": "sites.ss_ge.SsGeSite",
     "myhome_ge": "sites.myhome_ge.MyhomeGeSite",
@@ -26,13 +30,122 @@ SITE_DOMAINS = {
 }
 
 _AUTH_CACHE: dict[tuple[str, str], tuple[float, str]] = {}
-AUTH_CACHE_TTL = 300
+AUTH_CACHE_TTL = 300  # in-memory fallback
+PERSISTENT_CACHE_TTL = 900  # 15 min — survives restarts
+_STALE_REFRESHING: set[tuple[str, str]] = set()  # guards against duplicate background refreshes
+
+
+def _read_persistent_auth(user_id: str, site: str) -> dict | None:
+    """Read cached auth status from SQLite."""
+    conn = _get_db()
+    row = conn.execute(
+        "SELECT status, error, checked_at, expires_at FROM auth_status_cache WHERE user_id=? AND site=?",
+        (user_id, site),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "status": row["status"],
+        "error": row["error"] if row["error"] else None,
+        "checked_at": row["checked_at"],
+        "is_stale": now > row["expires_at"],
+    }
+
+
+def _write_persistent_auth(user_id: str, site: str, status: str, error: str | None = None):
+    """Persist auth status to SQLite."""
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(seconds=PERSISTENT_CACHE_TTL)
+    conn = _get_db()
+    conn.execute(
+        """INSERT OR REPLACE INTO auth_status_cache (user_id, site, status, error, checked_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (user_id, site, status, error or "", now.isoformat(), expires.isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+async def _do_browser_auth_check(user_id: str, site_name: str) -> dict:
+    """Launch browser and verify auth — the slow path."""
+    site_class = _get_site_class(site_name)
+    site = site_class()
+    try:
+        await _launch_authenticated_site(site, get_storage_state(user_id, site_name), get_cookies(user_id, site_name), site_name, headless=True)
+        await site.page.goto(site.base_url, wait_until="domcontentloaded", timeout=45000)
+        await asyncio.sleep(3)
+        valid = await site._verify_auth()
+        if valid:
+            save_storage_state(user_id, site_name, await site.context.storage_state())
+        status = "valid" if valid else "expired"
+        _AUTH_CACHE[(user_id, site_name)] = (time.monotonic(), status)
+        _write_persistent_auth(user_id, site_name, status)
+        return {"status": status, "site": site_name}
+    except Exception as exc:
+        error_text = str(exc)
+        transient = any(marker in error_text.lower() for marker in ("timeout", "timed out", "connection", "targetclosed", "browser"))
+        status = "unknown" if transient else "expired"
+        _write_persistent_auth(user_id, site_name, status, error_text)
+        return {"status": status, "site": site_name, "error": error_text}
+    finally:
+        try:
+            await site._close()
+        except Exception:
+            pass
+
+
+async def check_site_auth(user_id: str, site_name: str) -> dict:
+    """Verify that the stored browser state still authenticates on the site.
+
+    Returns cached status instantly (stale-while-revalidate).
+    Only launches a browser when cache is missing or expired.
+    """
+    if site_name not in SITE_CLASSES:
+        return {"status": "unsupported", "site": site_name}
+    if not has_cookies(user_id, site_name):
+        return {"status": "missing", "site": site_name}
+
+    # 1. In-memory cache (fastest)
+    cache_key = (user_id, site_name)
+    cached = _AUTH_CACHE.get(cache_key)
+    if cached and time.monotonic() - cached[0] < AUTH_CACHE_TTL:
+        return {"status": cached[1], "site": site_name, "cached": True}
+
+    # 2. Persistent SQLite cache (survives restarts)
+    persistent = _read_persistent_auth(user_id, site_name)
+    if persistent:
+        if not persistent["is_stale"]:
+            # Fresh cache — return immediately
+            _AUTH_CACHE[cache_key] = (time.monotonic(), persistent["status"])
+            return {"status": persistent["status"], "site": site_name, "cached": True}
+        # Stale — return old value but trigger background refresh
+        if cache_key not in _STALE_REFRESHING:
+            _STALE_REFRESHING.add(cache_key)
+            asyncio.create_task(_refresh_auth_background(user_id, site_name))
+        return {"status": persistent["status"], "site": site_name, "cached": True, "stale": True}
+
+    # 3. Cold cache — must do real browser check (first time only)
+    return await _do_browser_auth_check(user_id, site_name)
+
+
+async def _refresh_auth_background(user_id: str, site_name: str):
+    """Background refresh of stale auth cache."""
+    try:
+        await _do_browser_auth_check(user_id, site_name)
+    except Exception:
+        pass
+    finally:
+        _STALE_REFRESHING.discard((user_id, site_name))
 
 
 def classify_publish_error(error: str) -> tuple[str, str]:
     text = str(error or '').lower()
     if any(marker in text for marker in ('cloudflare', 'turnstile', 'captcha', 'verify you are human', 'access denied', 'bot protection')):
-        return 'BOT_PROTECTION', 'Площадка включила проверку безопасности. Откройте сайт вручную, подтвердите доступ и повторите публикацию'
+        return 'BOT_PROTECTION', 'Площадка временно недоступна — администратор уже уведомлён автоматически'
     if 'cookie' in text or 'authentication' in text or 'auth' in text:
         return 'AUTH_EXPIRED', 'Повторно войдите в аккаунт площадки'
     if 'balance' in text or 'баланс' in text or 'денег' in text:
@@ -72,7 +185,7 @@ def user_publish_message(site_name: str, code: str, error: str, action: str) -> 
     if code == 'PHOTO_UPLOAD_ERROR':
         return f'Публикация на {site} не выполнена: не удалось загрузить все фотографии. Проверьте фото и повторите публикацию.'
     if code == 'BOT_PROTECTION':
-        return f'Публикация на {site} остановлена: площадка включила проверку безопасности. Откройте {site} вручную, пройдите проверку и повторите публикацию.'
+        return f'Публикация на {site} приостановлена: площадка включила проверку безопасности. Администратор уже уведомлён автоматически — проблема решается без вашего участия. Повторите попытку через несколько минут.'
     if code == 'SITE_VALIDATION_ERROR':
         return f'Публикация на {site} не выполнена: сайт отклонил обязательные поля. Проверьте данные объявления и повторите публикацию.'
     if code == 'PUBLISH_TIMEOUT':
@@ -354,42 +467,6 @@ async def _launch_authenticated_site(site, storage_state: dict | None, user_cook
         if cookies_to_load:
             await site.context.add_cookies(cookies_to_load)
     site.page = await site.context.new_page()
-
-
-async def check_site_auth(user_id: str, site_name: str) -> dict:
-    """Ping the real site with stored credentials and report valid/expired/missing."""
-    if site_name not in SITE_CLASSES:
-        return {"status": "unsupported", "site": site_name}
-    if not has_cookies(user_id, site_name):
-        return {"status": "missing", "site": site_name}
-
-    cache_key = (user_id, site_name)
-    cached = _AUTH_CACHE.get(cache_key)
-    if cached and time.monotonic() - cached[0] < AUTH_CACHE_TTL:
-        return {"status": cached[1], "site": site_name, "cached": True}
-
-    site_class = _get_site_class(site_name)
-    site = site_class()
-    try:
-        await _launch_authenticated_site(site, get_storage_state(user_id, site_name), get_cookies(user_id, site_name), site_name, headless=True)
-        await site.page.goto(site.base_url, wait_until="domcontentloaded", timeout=45000)
-        await asyncio.sleep(3)
-        valid = await site._verify_auth()
-        if valid:
-            save_storage_state(user_id, site_name, await site.context.storage_state())
-        status = "valid" if valid else "expired"
-        if status == "valid":
-            _AUTH_CACHE[cache_key] = (time.monotonic(), status)
-        return {"status": status, "site": site_name}
-    except Exception as exc:
-        error_text = str(exc)
-        transient = any(marker in error_text.lower() for marker in ("timeout", "timed out", "connection", "targetclosed", "browser"))
-        return {"status": "unknown" if transient else "expired", "site": site_name, "error": error_text}
-    finally:
-        try:
-            await site._close()
-        except Exception:
-            pass
 
 
 async def check_site_preflight(user_id: str, site_name: str) -> dict:

@@ -224,6 +224,18 @@ def init_db():
             FOREIGN KEY (task_id) REFERENCES parse_tasks(task_id) ON DELETE CASCADE
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_status_cache (
+            user_id TEXT NOT NULL,
+            site TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error TEXT,
+            checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, site)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_auth_cache_user_site ON auth_status_cache(user_id, site, expires_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_parse_tasks_status ON parse_tasks(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_parse_tasks_heartbeat ON parse_tasks(status, last_heartbeat)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_parse_checkpoints_resume ON parse_checkpoints(task_id, status, site, page_num)")

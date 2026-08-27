@@ -804,6 +804,22 @@ echo "Steel Browser is running on port 8080"
             status,
             error_details: status === 'published' ? null : failed.map(item => `${item.platform}: ${item.result?.user_message || item.result?.error || task.error || 'неизвестная ошибка'}`).join('\n'),
           };
+          // === Auto-alert admin on critical publish errors ===
+          const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;
+          const criticalFailed = failed.filter(item => {
+            const err = String(item.result?.error || '').toLowerCase();
+            const code = item.result?.error_code || '';
+            return code === 'BOT_PROTECTION' || err.includes('bot_protection') || err.includes('captcha') || err.includes('cloudflare')
+              || err.includes('security') || err.includes('challenge');
+          });
+          if (ADMIN_CHAT_ID && criticalFailed.length > 0) {
+            const siteNames: Record<string, string> = { ssge: 'SS.ge', korter: 'Korter.ge', myhome: 'MyHome.ge' };
+            const alertLines = criticalFailed.map(item =>
+              `🌐 ${siteNames[item.platform] || item.platform}: ${item.result?.error_code || 'BOT_PROTECTION'}\n   ${item.result?.error || 'неизвестная ошибка'}\n   скриншот: ${item.result?.screenshot_error || item.result?.screenshot_filled || 'нет'}`
+            );
+            const alertText = `🚨 Ошибка публикации — требуется вмешательство\n\n👤 Пользователь: ${userId}\n📋 Объект: ${listing.title || listing.description?.slice(0, 50) || listingId}\n🆔 Task: ${taskId}\n\n${alertLines.join('\n\n')}\n\n⚠️ Юзер не может решить это самостоятельно — нужно ручное вмешательство администратора.`;
+            sendTelegramMessage(ADMIN_CHAT_ID, alertText).catch((e: any) => console.error('[Admin alert] Failed:', e.message));
+          }
            const listingUrls = Object.fromEntries(successful.filter(item => item.result?.url).map(item => [item.platform, item.result.url]));
            await Promise.all(siteResults.map(item => updateListingPublication({
              listingId,
