@@ -46,6 +46,8 @@ tasks: dict[str, dict] = {}
 PUBLISH_TASKS_FILE = Path('/root/karty-lab/publish_tasks.json')
 PUBLISH_STATE_DB = Path('/root/karty-lab/realtors.db')
 tasks_lock = threading.Lock()
+publish_site_locks: dict[tuple[str, str], asyncio.Lock] = {}
+active_publish_processes: dict[str, asyncio.subprocess.Process] = {}
 
 
 def _init_publish_idempotency() -> None:
@@ -70,23 +72,82 @@ def _load_publish_tasks():
         data = json.loads(PUBLISH_TASKS_FILE.read_text())
         for task_id, task in data.items():
             if task.get('status') == 'processing':
-                task['status'] = 'failed'
-                task['error'] = 'API перезапущен во время публикации'
+                task['status'] = 'publish_unknown'
+                task['error'] = 'API перезапущен во время публикации; проверьте кабинет площадки перед повтором'
             tasks[task_id] = task
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[publish] Could not restore task state: {exc}", flush=True)
 
 
 def _save_publish_tasks():
     try:
         with tasks_lock:
             recent = dict(list(tasks.items())[-200:])
-            PUBLISH_TASKS_FILE.write_text(json.dumps(recent, ensure_ascii=False))
-    except Exception:
-        pass
+            temporary = PUBLISH_TASKS_FILE.with_suffix('.tmp')
+            temporary.write_text(json.dumps(recent, ensure_ascii=False))
+            temporary.replace(PUBLISH_TASKS_FILE)
+    except Exception as exc:
+        print(f"[publish] Could not persist task state: {exc}", flush=True)
+
+
+def _safe_failed_retry(task: dict) -> bool:
+    """A failed task may be retried only when no portal could have submitted it."""
+    if task.get("status") != "failed":
+        return False
+    ambiguous_stages = {"submit", "verification"}
+    return all(
+        result.get("stage") not in ambiguous_stages
+        and result.get("error_code") != "PUBLISH_NOT_VERIFIED"
+        for result in task.get("results", {}).values()
+        if isinstance(result, dict)
+    )
+
+
+def _publish_lock(user_id: str, site: str) -> asyncio.Lock:
+    key = (user_id, site)
+    if key not in publish_site_locks:
+        publish_site_locks[key] = asyncio.Lock()
+    return publish_site_locks[key]
 
 
 _load_publish_tasks()
+
+
+@app.on_event("shutdown")
+async def stop_publish_workers() -> None:
+    """Stop isolated publication process groups before the API exits.
+
+    Publish workers run in their own sessions so a timeout can clean up their
+    browser descendants. That also means the API must explicitly terminate
+    them during a graceful restart.
+    """
+    running = list(active_publish_processes.items())
+    for task_id, process in running:
+        if process.returncode is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        task = tasks.get(task_id)
+        if task and task.get("status") == "processing":
+            task["status"] = "publish_unknown"
+            task["error"] = "API остановлен во время публикации; проверьте кабинет площадки перед повтором"
+
+    if running:
+        waits = [asyncio.create_task(process.wait()) for _, process in running]
+        _, pending = await asyncio.wait(waits, timeout=10)
+        for wait in pending:
+            wait.cancel()
+        for _, process in running:
+            if process.returncode is None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        if pending:
+            await asyncio.gather(*(process.wait() for _, process in running), return_exceptions=True)
+    active_publish_processes.clear()
+    _save_publish_tasks()
 
 
 async def _notify_publish_failure(task_id: str, req: PublishRequest, results: dict):
@@ -258,6 +319,8 @@ async def publish_preflight(data: dict):
 async def start_publish(req: PublishRequest):
     """Start publishing listing to specified sites. Returns task_id for polling."""
     valid_sites = {"ss_ge", "myhome_ge", "korter_ge"}
+    if not req.sites:
+        raise HTTPException(400, "At least one publishing site is required")
     invalid = set(req.sites) - valid_sites
     if invalid:
         raise HTTPException(400, f"Invalid sites: {invalid}")
@@ -277,13 +340,12 @@ async def start_publish(req: PublishRequest):
                 existing_id = row[0]
                 existing = tasks.get(existing_id)
                 if existing:
-                    return PublishResponse(task_id=existing_id, status=existing.get("status", "processing"))
-                raise HTTPException(409, "Идемпотентный ключ уже использован предыдущей задачей")
-
-        requested_sites = set(req.sites)
-        for existing_id, existing in tasks.items():
-            if existing.get("status") == "processing" and existing.get("user_id") == req.user_id and requested_sites.intersection(existing.get("sites", [])):
-                raise HTTPException(409, f"Публикация уже выполняется: {existing_id}")
+                    if not _safe_failed_retry(existing):
+                        return PublishResponse(task_id=existing_id, status=existing.get("status", "processing"))
+                    with sqlite3.connect(PUBLISH_STATE_DB) as conn:
+                        conn.execute("DELETE FROM publish_idempotency WHERE idempotency_key = ?", (req.idempotency_key,))
+                else:
+                    raise HTTPException(409, "Статус предыдущей публикации недоступен. Проверьте кабинет площадки перед повтором")
 
         task_id = str(uuid.uuid4())[:8]
         tasks[task_id] = {
@@ -310,6 +372,7 @@ async def start_publish(req: PublishRequest):
 
 async def _run_publish(task_id: str, req: PublishRequest):
     """Background task that runs the actual publishing."""
+    acquired_locks: list[asyncio.Lock] = []
     try:
         async def checkpoint(site: str, data: dict):
             tasks[task_id]["results"][site] = data
@@ -319,6 +382,13 @@ async def _run_publish(task_id: str, req: PublishRequest):
                 "updated_at": datetime.now().isoformat(),
             }
             _save_publish_tasks()
+
+        for site in req.sites:
+            await checkpoint(site, {"status": "processing", "stage": "queued"})
+        for site in sorted(set(req.sites)):
+            lock = _publish_lock(req.user_id, site)
+            await lock.acquire()
+            acquired_locks.append(lock)
 
         for site in req.sites:
             await checkpoint(site, {"status": "processing", "stage": "worker_start"})
@@ -350,7 +420,9 @@ async def _run_publish(task_id: str, req: PublishRequest):
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
+        active_publish_processes[task_id] = process
         worker_timeout = int(os.getenv("PUBLISH_WORKER_TIMEOUT_SECONDS", "900"))
         try:
             stdout, stderr = await asyncio.wait_for(
@@ -358,7 +430,10 @@ async def _run_publish(task_id: str, req: PublishRequest):
                 timeout=worker_timeout,
             )
         except asyncio.TimeoutError:
-            process.kill()
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             await process.wait()
             raise RuntimeError(f"PUBLISH_WORKER_TIMEOUT after {worker_timeout}s")
         if stderr:
@@ -398,6 +473,10 @@ async def _run_publish(task_id: str, req: PublishRequest):
         tasks[task_id]["completed_at"] = datetime.now().isoformat()
         _save_publish_tasks()
         await _notify_publish_failure(task_id, req, {"publish": {"status": "failed", "error": str(e), "error_code": worker_code, "user_action": "Повторите публикацию и проверьте Task ID"}})
+    finally:
+        active_publish_processes.pop(task_id, None)
+        for lock in reversed(acquired_locks):
+            lock.release()
 
 
 @app.get("/api/publish/{task_id}", response_model=TaskStatus)

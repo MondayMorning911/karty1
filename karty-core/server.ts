@@ -531,6 +531,7 @@ async function startServer() {
   app.post('/api/cloudinary/upload', async (req, res) => {
     try {
       const { dataUrl, userId } = req.body;
+      if (!userId || !(await requirePublishIdentity(req, res, String(userId)))) return;
       const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
       const apiKey = process.env.CLOUDINARY_API_KEY;
       const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -992,6 +993,7 @@ echo "Steel Browser is running on port 8080"
         return res.status(400).json({ error: 'userId, objectId and text are required' });
       }
       if (!(await requirePublishIdentity(req, res, userId))) return;
+      if (!(await requireListingOwner(res, objectId, userId))) return;
       console.log(`[Publish] korter for user=${userId} object=${objectId}`);
 
       const listing = buildListingForPublish(text, parsedData);
@@ -1023,6 +1025,7 @@ echo "Steel Browser is running on port 8080"
         return res.status(400).json({ error: 'userId, objectId and text are required' });
       }
       if (!(await requirePublishIdentity(req, res, userId))) return;
+      if (!(await requireListingOwner(res, objectId, userId))) return;
       console.log(`[Publish] ssge for user=${userId} object=${objectId}`);
 
       const listing = buildListingForPublish(text, parsedData);
@@ -1054,6 +1057,7 @@ echo "Steel Browser is running on port 8080"
         return res.status(400).json({ error: 'userId, objectId and text are required' });
       }
       if (!(await requirePublishIdentity(req, res, userId))) return;
+      if (!(await requireListingOwner(res, objectId, userId))) return;
       console.log(`[Publish] myhome for user=${userId} object=${objectId}`);
 
       const listing = buildListingForPublish(text, parsedData);
@@ -1139,7 +1143,14 @@ echo "Steel Browser is running on port 8080"
       });
       const result = await resp.json();
       if (!resp.ok || !result.task_id) return res.status(resp.status || 502).json({ error: result.detail || result.error || 'Python publish API failed' });
-       monitorPublishTask(result.task_id, objectId, portals, userId, listing);
+      await Promise.all(portals.map((platform: string) => updateListingPublication({
+        listingId: objectId,
+        userId,
+        platform,
+        taskId: result.task_id,
+        status: 'processing',
+      })));
+      monitorPublishTask(result.task_id, objectId, portals, userId, listing);
        res.json({ status: 'started', task_id: result.task_id });
     } catch (e: any) {
       console.error('[Publish/auto] Error:', e.message);

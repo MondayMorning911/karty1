@@ -5,7 +5,11 @@ dotenv.config();
 const openai = new OpenAI({
   baseURL: 'https://api.deepseek.com',
   apiKey: process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || 'sk-placeholder',
+  timeout: 30_000,
+  maxRetries: 0,
 });
+
+const EXTERNAL_REQUEST_TIMEOUT_MS = 10_000;
 
 // Helper functions for geocoding
 async function fetchFromNominatim(query: string): Promise<string | null> {
@@ -15,7 +19,8 @@ async function fetchFromNominatim(query: string): Promise<string | null> {
       headers: {
         'User-Agent': 'KartyBot/1.0', 
         'Accept-Language': 'ru'       
-      }
+      },
+      signal: AbortSignal.timeout(EXTERNAL_REQUEST_TIMEOUT_MS),
     });
 
     const data = await response.json();
@@ -32,7 +37,7 @@ async function fetchFromNominatim(query: string): Promise<string | null> {
 async function fetchFromPhoton(query: string): Promise<string | null> {
   try {
     const url = `https://photon.komoot.io/api?q=${encodeURIComponent(query)}&lang=ru&limit=1`;
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_REQUEST_TIMEOUT_MS) });
     const data = await response.json();
 
     const features = data?.features;
@@ -155,11 +160,10 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
 Верните ТОЛЬКО JSON объект, где отсутствующие поля равны null.`;
   }
 
-  try {
-    let lastError: any = null;
-    // Retry up to 2 times on failure
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
+  let lastError: any = null;
+  // Retry up to 2 times on transient provider or response-format failures.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
         const response = await openai.chat.completions.create({
           model: "deepseek-chat",
           messages: [
@@ -201,7 +205,10 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
         const mapboxToken = process.env.VITE_MAPBOX_TOKEN;
         if (mapboxToken) {
           try {
-            const geoResponse = await fetch(`https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(json.address)}&access_token=${mapboxToken}&limit=1`);
+            const geoResponse = await fetch(
+              `https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(json.address)}&access_token=${mapboxToken}&limit=1`,
+              { signal: AbortSignal.timeout(EXTERNAL_REQUEST_TIMEOUT_MS) },
+            );
             const geoData = await geoResponse.json();
             if (geoData && geoData.features && geoData.features.length > 0) {
               const coords = geoData.features[0].geometry.coordinates; // [lng, lat]
@@ -215,9 +222,13 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
       }
     }
 
-    return json;
-  } catch (error: any) {
-    console.error("Deepseek parse error:", error?.message || error);
-    return { error: error?.message || 'AI service temporarily unavailable' };
+      return json;
+    } catch (error: any) {
+      lastError = error;
+      console.error(`Deepseek parse attempt ${attempt} failed:`, error?.message || error);
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500));
+    }
   }
+  console.error("Deepseek parse error:", lastError?.message || lastError);
+  return { error: lastError?.message || 'AI service temporarily unavailable' };
 }
