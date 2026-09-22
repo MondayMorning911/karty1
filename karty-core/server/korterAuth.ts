@@ -160,7 +160,11 @@ export const korterAuthManager = {
       console.log(`[KorterAuth] Profile element found. Authentication successful! Extracting storage state...`);
       // Сохраняем "Крепкие куки"
       const storageState = await context.storageState();
-      
+
+      // Navigate back to korter.ge to ensure we capture localStorage from the correct origin
+      await page.goto('https://korter.ge/ru', { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+      await delay(2000);
+
       let localStorageData = await page.evaluate(() => {
           let data: Record<string, string> = {};
           for(let i=0; i<localStorage.length; i++) {
@@ -176,9 +180,9 @@ export const korterAuthManager = {
           return {};
       });
 
-      // Ensure parent documents exist -> This won't be needed with Supabase directly if we use foreign keys, but let's just insert
+      // Always use korter.ge origin — page.url() may have redirected to a different path
       storageState.origins = [{
-          origin: new URL(page.url()).origin,
+          origin: 'https://korter.ge',
           localStorage: Object.entries(localStorageData).map(([name, value]) => ({name, value})) as any
       }] as any;
 

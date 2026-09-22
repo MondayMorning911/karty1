@@ -149,6 +149,8 @@ export function CrmChats({ userRole, currentManagerId }: { userRole: 'admin' | '
   const filteredChats = chats.filter(c => {
     if (platformFilter !== 'all' && c.platform !== platformFilter) return false;
     if (managerFilter !== 'all' && c.manager_id !== managerFilter) return false;
+    // Hide auto-created chats from bot messages (no real manager assigned)
+    if (c.manager_id === 'pending') return false;
     return true;
   });
 

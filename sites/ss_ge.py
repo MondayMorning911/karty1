@@ -163,7 +163,7 @@ class SsGeSite(BaseSite):
     async def _verify_auth(self) -> bool:
         try:
             await self.page.goto(CREATE_URL, wait_until="domcontentloaded", timeout=60000)
-            await asyncio.sleep(10)
+            await asyncio.sleep(3)
             # Check if "Авторизация" button is visible = NOT logged in
             is_logged = await self.page.evaluate("""() => {
                 const links = document.querySelectorAll('a, button, span');

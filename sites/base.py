@@ -155,7 +155,7 @@ class BaseSite:
 
                 self.log.info(f"Checking auth on {self.base_url}...")
                 await self.page.goto(self.base_url, wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(8)
+                await asyncio.sleep(3)
                 if await self._is_bot_protection_page():
                     result["error"] = "BOT_PROTECTION: site security challenge detected"
                     result["stage"] = "auth"

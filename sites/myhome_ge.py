@@ -135,7 +135,7 @@ class MyhomeGeSite(BaseSite):
     async def _verify_auth(self) -> bool:
         try:
             await self.page.goto("https://www.myhome.ge/", wait_until="domcontentloaded", timeout=TIMEOUT)
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
             is_logged = await self.page.evaluate("""() => {
                 const links = document.querySelectorAll('a, button');
                 for (const el of links) {

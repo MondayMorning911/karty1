@@ -12,7 +12,8 @@ import { AuthManager } from './server/authManager.js';
 import { supabaseServer } from './server/supabase.js';
 import { startPythonApi } from './server/pythonApi.js';
 import { crmLogin, listManagers, addManager, deleteManager, saveCrmSession, loadCrmSession, deleteCrmSession } from './server/crmAuth.js';
-import { upsertChat, addMessage, getChats, getChat, getMessages, markRead, assignChat, getAccounts, addAccount, deleteAccount, getDb } from './server/crmChats.js';
+import { upsertChat, addMessage, getChats, getChat, getMessages, markRead, assignChat, getAccounts, addAccount, deleteAccount, clearAllChats, getDb } from './server/crmChats.js';
+import { listPlans, updatePlan, updatePlanPrice, getPlan, getActiveSubscription, activateSubscription, getUsageInfo, incrementListingUsage, incrementPresentationUsage, canPublish, canCreatePresentation, recordPayment as recordBillingPayment, listPayments } from './server/billing.js';
 import { syncRealtorLead, listLeads, removeUnqualifiedRealtorLeads, removeUnqualifiedTelegramLeads, getLead, findLeadByChat, updateLead, claimLead, addLeadEvent, listLeadEvents, createReferralLink, getReferralLink, recordPayment, recordLeadUsage, getLeadUsage, upsertTelegramLead } from './server/crmLeads.js';
 import { generateGreetingVariants } from './server/crmMessaging.js';
 import { executeSinglePortalFallback } from './server/skyvernOrchestrator.js';
@@ -48,17 +49,39 @@ function extractJsonObject(text: string): any | null {
   return null;
 }
 
+// ── Supabase JWT cache ──
+// Avoids hitting Supabase auth.getUser() on every single request.
+// Token validation is expensive (~50-100ms network round-trip).
+const _jwtCache = new Map<string, { userId: string; expiresAt: number }>();
+const JWT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 async function getAuthenticatedUserId(req: any, res: any): Promise<string | null> {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!token) {
     res.status(401).json({ error: 'Авторизация пользователя отсутствует' });
     return null;
   }
+
+  // Fast path: check in-memory JWT cache
+  const cached = _jwtCache.get(token);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.userId;
+  }
+
   try {
     const { data, error } = await supabaseServer.auth.getUser(token);
     if (error || !data.user) {
       res.status(401).json({ error: 'Недействительная авторизация пользователя' });
       return null;
+    }
+    // Cache the validated token
+    _jwtCache.set(token, { userId: data.user.id, expiresAt: Date.now() + JWT_CACHE_TTL_MS });
+    // Evict stale entries periodically (max 1000 tokens)
+    if (_jwtCache.size > 1000) {
+      const now = Date.now();
+      for (const [key, val] of _jwtCache) {
+        if (now >= val.expiresAt) _jwtCache.delete(key);
+      }
     }
     return data.user.id;
   } catch (error: any) {
@@ -650,17 +673,32 @@ echo "Steel Browser is running on port 8080"
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, site }),
       });
+      // Invalidate Node-side auth status cache
+      _authStatusCache.delete(`${userId}:${site}`);
       res.json({ success: true, message: 'Session removed' });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
+  // ── Node-side auth status cache ──
+  // Avoids Node→Python HTTP call when Python already returned fresh data.
+  const _authStatusCache = new Map<string, { data: any; expiresAt: number }>();
+  const AUTH_STATUS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 min (shorter than Python's 15 min)
+
   app.post('/api/auth/status', async (req, res) => {
     const { userId, siteKey } = req.body;
     const site = SITE_MAP[siteKey] || siteKey;
     if (!userId || !site) return res.status(400).json({ error: 'userId and siteKey are required' });
     if (!(await requirePublishIdentity(req, res, userId))) return;
+
+    // Fast path: Node-side cache
+    const cacheKey = `${userId}:${site}`;
+    const cached = _authStatusCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return res.json({ ...cached.data, node_cached: true });
+    }
+
     try {
       const response = await fetch(`${PYTHON_API}/api/auth/check`, {
         method: 'POST',
@@ -668,6 +706,10 @@ echo "Steel Browser is running on port 8080"
         body: JSON.stringify({ user_id: userId, site }),
       });
       const data = await response.json();
+      // Cache successful responses (but not errors)
+      if (response.ok && (data.status === 'valid' || data.status === 'expired' || data.status === 'missing')) {
+        _authStatusCache.set(cacheKey, { data, expiresAt: Date.now() + AUTH_STATUS_CACHE_TTL_MS });
+      }
       res.status(response.status).json(data);
     } catch (error: any) {
       res.status(503).json({ status: 'unknown', error: error.message });
@@ -896,12 +938,16 @@ echo "Steel Browser is running on port 8080"
     if (!listing.description || listing.description.trim().length < 10) errors.push('описание');
     if (!photos.length) errors.push('фотографии');
     const required = (fields: Array<[string, any]>) => fields.forEach(([label, value]) => { if (value === undefined || value === null || value === '' || value === 0) errors.push(label); });
-    if (site === 'ss_ge' && listing.type === 'apartment') required([['количество комнат', listing.rooms], ['спальни', listing.bedrooms], ['этаж', listing.floor], ['этажность', listing.floors_total]]);
+    const isStudio = listing._is_studio || /студи/i.test(listing.description || '');
+    if (site === 'ss_ge' && listing.type === 'apartment' && !isStudio) required([['количество комнат', listing.rooms], ['спальни', listing.bedrooms], ['этаж', listing.floor], ['этажность', listing.floors_total]]);
+    if (site === 'ss_ge' && listing.type === 'apartment' && isStudio) required([['этаж', listing.floor], ['этажность', listing.floors_total]]);
     if (site === 'ss_ge' && listing.type === 'house') required([['количество комнат', listing.rooms], ['спальни', listing.bedrooms], ['площадь двора', listing.yard_area]]);
-    if (site === 'myhome_ge' && listing.type === 'apartment') required([['количество комнат', listing.rooms], ['этаж', listing.floor], ['этажность', listing.floors_total]]);
+    if (site === 'myhome_ge' && listing.type === 'apartment' && !isStudio) required([['количество комнат', listing.rooms], ['этаж', listing.floor], ['этажность', listing.floors_total]]);
+    if (site === 'myhome_ge' && listing.type === 'apartment' && isStudio) required([['этаж', listing.floor], ['этажность', listing.floors_total]]);
     if (site === 'myhome_ge' && listing.type === 'house') required([['количество комнат', listing.rooms], ['спальни', listing.bedrooms], ['этажность', listing.floors_total]]);
     if (site === 'myhome_ge' && listing.type === 'commercial') required([['количество комнат', listing.rooms], ['этаж', listing.floor], ['этажность', listing.floors_total]]);
-    if (site === 'korter_ge' && listing.type === 'apartment') required([['количество комнат', listing.rooms], ['спальни', listing.bedrooms], ['этаж', listing.floor], ['этажность', listing.floors_total]]);
+    if (site === 'korter_ge' && listing.type === 'apartment' && !isStudio) required([['количество комнат', listing.rooms], ['спальни', listing.bedrooms], ['этаж', listing.floor], ['этажность', listing.floors_total]]);
+    if (site === 'korter_ge' && listing.type === 'apartment' && isStudio) required([['этаж', listing.floor], ['этажность', listing.floors_total]]);
     if (site === 'korter_ge' && listing.type === 'house') required([['количество комнат', listing.rooms], ['спальни', listing.bedrooms], ['этажность', listing.floors_total]]);
     if (site === 'korter_ge' && listing.type === 'commercial') required([['этаж', listing.floor], ['этажность', listing.floors_total]]);
     if (site === 'korter_ge' && photos.length < 3) errors.push('минимум 3 фотографии для Korter');
@@ -913,20 +959,25 @@ echo "Steel Browser is running on port 8080"
     if (!text?.trim()) return res.status(400).json({ error: 'text is required' });
     if (!userId || !(await requirePublishIdentity(req, res, userId))) return;
     const listing = buildListingForPublish(text, parsedData);
-    const localChecks = sites.map((site: string) => preflightListing(listing, SITE_MAP[site] || site, photos));
+    const requestedSites = Array.isArray(sites) && sites.length > 0 ? sites : ['ss_ge', 'myhome_ge', 'korter_ge'];
+    const localChecks = requestedSites.map((site: string) => preflightListing(listing, SITE_MAP[site] || site, photos));
     if (!userId) return res.status(400).json({ error: 'userId is required', listing, checks: localChecks });
     try {
+      const mappedSites = requestedSites.map((site: string) => SITE_MAP[site] || site);
       const response = await fetch(`${PYTHON_API}/api/publish/preflight`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, sites: sites.map((site: string) => SITE_MAP[site] || site), listing: { ...listing, photo_urls: photos }, photos }),
+        body: JSON.stringify({ user_id: userId, sites: mappedSites, listing: { ...listing, photo_urls: photos }, photos }),
       });
       const remote = await response.json();
       const uniqueMessages = (items: string[]) => [...new Map(items.filter(Boolean).map(item => [item.toLowerCase(), item])).values()];
-      const checks = (remote.checks || []).map((check: any) => {
-        const local = localChecks.find(item => item.site === check.site);
-        return { ...check, errors: uniqueMessages([...(local?.errors || []), ...(check.errors || [])]), warnings: uniqueMessages([...(local?.warnings || []), ...(check.warnings || [])]) };
-      });
+      const allowedSites = new Set(mappedSites);
+      const checks = (remote.checks || [])
+        .filter((check: any) => allowedSites.has(check.site))
+        .map((check: any) => {
+          const local = localChecks.find(item => item.site === check.site);
+          return { ...check, errors: uniqueMessages([...(local?.errors || []), ...(check.errors || [])]), warnings: uniqueMessages([...(local?.warnings || []), ...(check.warnings || [])]) };
+        });
       return res.status(response.status).json({ listing, ready: remote.ready && checks.every((check: any) => check.ready), checks });
     } catch (error: any) {
       return res.status(503).json({ error: `Не удалось проверить площадки: ${error.message}`, listing, checks: localChecks });
@@ -1183,6 +1234,13 @@ echo "Steel Browser is running on port 8080"
     if (number(parsed.bedrooms) > 0) listing.bedrooms = Math.round(number(parsed.bedrooms));
     if (number(parsed.floor) > 0) listing.floor = Math.round(number(parsed.floor));
     if (number(parsed.floorCount) > 0) listing.floors_total = Math.round(number(parsed.floorCount));
+    // Studio apartments: auto-set rooms=1, bedrooms=1 (studios are 1-room with sleeping area)
+    const isStudio = /студи/i.test(text) || /студи/i.test(String(parsed.propertyType || ''));
+    if (isStudio && listing.type === 'apartment') {
+      if (!listing.rooms || listing.rooms === 0) listing.rooms = 1;
+      if (!listing.bedrooms || listing.bedrooms === 0) listing.bedrooms = 1;
+      listing._is_studio = true;
+    }
     if (number(parsed.yard_area) > 0) listing.yard_area = Math.round(number(parsed.yard_area));
     if (number(parsed.land_area) > 0) listing.land_area = Math.round(number(parsed.land_area));
     if (listing.city && listing.address && !listing.address.toLowerCase().includes(listing.city.toLowerCase())) listing.address = `${listing.city}, ${listing.address}`;
@@ -1204,6 +1262,7 @@ echo "Steel Browser is running on port 8080"
     const { text, styleId } = req.body;
     if (!text) return res.json(null);
     const result = await parseListingWithDeepSeek(text, styleId);
+    if (result?.error) return res.status(503).json({ error: result.error });
     res.json(result);
   });
 
@@ -1861,6 +1920,48 @@ echo "Steel Browser is running on port 8080"
     }
   }, 30 * 60 * 1000); // Every 30 minutes
 
+  // === Billing / Tribute ===
+  app.get('/api/billing/plans', async (_req, res) => {
+    res.json({ plans: listPlans(true) });
+  });
+
+  app.get('/api/billing/status', async (req: any, res) => {
+    const userId = await getAuthenticatedUserId(req, res);
+    if (!userId) return;
+    res.json(getUsageInfo(userId));
+  });
+
+  app.get('/api/billing/payments', authMiddleware, adminOnly, async (_req, res) => {
+    res.json({ payments: listPayments(50) });
+  });
+
+  app.put('/api/billing/plans/:id', authMiddleware, adminOnly, async (req, res) => {
+    try {
+      updatePlan(req.params.id, req.body);
+      res.json({ success: true, plan: getPlan(req.params.id) });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put('/api/billing/plans/:id/price', authMiddleware, adminOnly, async (req, res) => {
+    try {
+      updatePlanPrice(req.params.id, Math.round(Number(req.body.price_cents) * 100));
+      res.json({ success: true, plan: getPlan(req.params.id) });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/billing/tribute-webhook', async (req, res) => {
+    try {
+      const { user_id, plan_id, payment_id, amount_cents, status } = req.body;
+      if (status !== 'completed' && status !== 'paid') return res.json({ ok: true, ignored: true });
+      if (!user_id || !plan_id) return res.status(400).json({ error: 'user_id and plan_id required' });
+      const plan = getPlan(plan_id);
+      if (!plan) return res.status(404).json({ error: 'Plan not found' });
+      recordBillingPayment(user_id, plan_id, amount_cents || plan.price_cents, payment_id || '');
+      activateSubscription(user_id, plan_id, payment_id);
+      res.json({ ok: true, activated: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   // === CRM Auth ===
   const sessions = new Map<string, { userId: string; role: string; name: string; login: string; expiresAt: number }>();
 
@@ -2074,6 +2175,11 @@ echo "Steel Browser is running on port 8080"
     if (!text) return res.status(400).json({ error: 'text required' });
     const ts = addMessage(req.params.chatId, sender || 'manager', text);
     res.json({ success: true, timestamp: ts });
+  });
+
+  app.delete('/api/crm/chats', authMiddleware, adminOnly, (req, res) => {
+    clearAllChats();
+    res.json({ success: true, message: 'Все диалоги и сообщения удалены' });
   });
 
   app.post('/api/crm/chats/:chatId/read', authMiddleware, (req, res) => {

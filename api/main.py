@@ -198,7 +198,9 @@ async def upload_storage_state(user_id: str, site: str, state: dict):
 async def publish_preflight(data: dict):
     """Validate listing data, photos, sessions and paid-site balances before publish."""
     user_id = str(data.get("user_id") or "")
-    sites = data.get("sites") or ["ss_ge", "myhome_ge", "korter_ge"]
+    sites = data.get("sites")
+    if not sites:
+        sites = []
     listing = data.get("listing") or {}
     photos = data.get("photos") or data.get("photo_urls") or listing.get("photo_urls") or []
     if not user_id:
@@ -225,18 +227,25 @@ async def publish_preflight(data: dict):
         if site == "korter_ge" and listing.get("type") == "land" and listing.get("deal") == "rent":
             errors.append("Korter не поддерживает аренду земельного участка")
         prop_type = listing.get("type")
-        if site == "ss_ge" and prop_type == "apartment":
+        is_studio = listing.get("_is_studio") or "студи" in str(listing.get("description", "")).lower()
+        if site == "ss_ge" and prop_type == "apartment" and not is_studio:
             required([("Количество комнат", listing.get("rooms")), ("Спальни", listing.get("bedrooms")), ("Этаж", listing.get("floor")), ("Этажность", listing.get("floors_total"))])
+        if site == "ss_ge" and prop_type == "apartment" and is_studio:
+            required([("Этаж", listing.get("floor")), ("Этажность", listing.get("floors_total"))])
         if site == "ss_ge" and prop_type == "house":
             required([("Количество комнат", listing.get("rooms")), ("Спальни", listing.get("bedrooms")), ("Площадь двора", listing.get("yard_area"))])
-        if site == "myhome_ge" and prop_type == "apartment":
+        if site == "myhome_ge" and prop_type == "apartment" and not is_studio:
             required([("Количество комнат", listing.get("rooms")), ("Этаж", listing.get("floor")), ("Этажность", listing.get("floors_total"))])
+        if site == "myhome_ge" and prop_type == "apartment" and is_studio:
+            required([("Этаж", listing.get("floor")), ("Этажность", listing.get("floors_total"))])
         if site == "myhome_ge" and prop_type == "house":
             required([("Количество комнат", listing.get("rooms")), ("Спальни", listing.get("bedrooms")), ("Этажность", listing.get("floors_total"))])
         if site == "myhome_ge" and prop_type == "commercial":
             required([("Количество комнат", listing.get("rooms")), ("Этаж", listing.get("floor")), ("Этажность", listing.get("floors_total"))])
-        if site == "korter_ge" and prop_type == "apartment":
+        if site == "korter_ge" and prop_type == "apartment" and not is_studio:
             required([("Количество комнат", listing.get("rooms")), ("Спальни", listing.get("bedrooms")), ("Этаж", listing.get("floor")), ("Этажность", listing.get("floors_total"))])
+        if site == "korter_ge" and prop_type == "apartment" and is_studio:
+            required([("Этаж", listing.get("floor")), ("Этажность", listing.get("floors_total"))])
         if site == "korter_ge" and prop_type == "house":
             required([("Количество комнат", listing.get("rooms")), ("Спальни", listing.get("bedrooms")), ("Этажность", listing.get("floors_total"))])
         if site == "korter_ge" and prop_type == "commercial":
@@ -446,6 +455,10 @@ async def remove_auth(req: dict):
     if not user_id or not site:
         raise HTTPException(400, "user_id and site are required")
     delete_auth_state(user_id, site)
+    # Invalidate in-memory caches for this user+site
+    from api.publisher import _AUTH_CACHE, _PREFLIGHT_CACHE
+    _AUTH_CACHE.pop((user_id, site), None)
+    _PREFLIGHT_CACHE.pop((user_id, site), None)
     return {"status": "removed", "site": site}
 
 

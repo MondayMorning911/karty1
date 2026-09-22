@@ -2,13 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Karty - Автоматизация публикаций</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      (function() {
+        // Anti-zoom: lock viewport to device-width. Telegram WebView sets ~980px;
+        // iOS zooms when input focused if width doesn't match layout.
+        function lock() {
+          var m = document.querySelector('meta[name="viewport"]');
+          if (m) m.setAttribute('content',
+            'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover');
+        }
+        lock();
+        // Re-lock after Telegram SDK init, DOM ready, and delayed overrides
+        ['DOMContentLoaded', 'load'].forEach(function(evt) {
+          document.addEventListener(evt, function() {
+            lock(); setTimeout(lock, 200); setTimeout(lock, 800);
+          });
+        });
+        setTimeout(lock, 500); setTimeout(lock, 1500);
+
+        // Re-lock on every input/textarea focus — Telegram/iOS override viewport right before keyboard
+        document.addEventListener('focusin', function(e) {
+          var t = e.target && e.target.tagName;
+          if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') lock();
+        }, true);
+
+        // MutationObserver: revert if Telegram rewrites viewport meta
+        if (typeof MutationObserver !== 'undefined') {
+          new MutationObserver(function(ms) {
+            for (var i = 0; i < ms.length; i++) {
+              var n = ms[i].target;
+              if (n.tagName === 'META' && n.getAttribute('name') === 'viewport') {
+                var c = n.getAttribute('content') || '';
+                if (c.indexOf('device-width') === -1 || c.indexOf('maximum-scale') === -1) lock();
+              }
+            }
+          }).observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['content'] });
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

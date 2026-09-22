@@ -140,4 +140,11 @@ export function getAccountsByManager(managerId: string) {
   return d.prepare('SELECT * FROM chat_accounts WHERE manager_id = ? AND active = 1').all(managerId);
 }
 
+export function clearAllChats() {
+  const d = getDb();
+  d.prepare('DELETE FROM chat_messages').run();
+  d.prepare('DELETE FROM chats').run();
+  try { d.prepare("DELETE FROM sqlite_sequence WHERE name IN ('chat_messages', 'chats')").run(); } catch {}
+}
+
 import crypto from 'crypto';

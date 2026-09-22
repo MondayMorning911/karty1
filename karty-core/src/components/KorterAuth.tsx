@@ -142,7 +142,7 @@ export const KorterAuth = ({ onBack, userId }: { onBack: () => void, userId: str
         </div>
         
         <p className="text-center text-xs text-slate-500 mt-6">
-          Karty использует headless-браузер для безопасного соединения с серверами площадки.
+          Karty безопасно подключается к серверам площадки для авторизации. Данные не хранятся на стороне Karty.
         </p>
       </div>
     </div>

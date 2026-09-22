@@ -23,6 +23,48 @@ const DUMMY_STYLES = [
   { id: 'original', label: 'Не менять' },
 ] as const;
 
+type ToastType = 'error' | 'success' | 'warning' | 'info';
+
+function Toast({ message, type, onClose }: { message: string; type: ToastType; onClose: () => void }) {
+  const config: Record<ToastType, { bg: string; icon: React.ReactNode }> = {
+    error: {
+      bg: 'bg-gradient-to-r from-[#e71d36] to-[#ff4264] text-white',
+      icon: <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0"><X size={14} className="text-white" /></div>,
+    },
+    success: {
+      bg: 'bg-gradient-to-r from-[#15be53] to-[#0fa94a] text-white',
+      icon: <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0"><CheckCircle2 size={14} className="text-white" /></div>,
+    },
+    warning: {
+      bg: 'bg-gradient-to-r from-amber-500 to-orange-400 text-white',
+      icon: <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0"><AlertCircle size={14} className="text-white" /></div>,
+    },
+    info: {
+      bg: 'bg-gradient-to-r from-[#533afd] to-[#7c5cfc] text-white',
+      icon: <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0"><Sparkles size={14} className="text-white" /></div>,
+    },
+  };
+  useEffect(() => {
+    const t = setTimeout(onClose, type === 'error' ? 6000 : 3500);
+    return () => clearTimeout(t);
+  }, [onClose, type]);
+  const { bg, icon } = config[type];
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -50, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -30, scale: 0.95 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      className={`fixed top-4 left-3 right-3 z-[9999] ${bg} rounded-2xl px-4 py-3 text-[13px] font-medium shadow-2xl shadow-black/20 flex items-center gap-3 cursor-pointer active:scale-[0.97] transition-transform`}
+      onClick={onClose}
+    >
+      {icon}
+      <span className="flex-1 leading-snug">{message}</span>
+      <X size={16} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity" />
+    </motion.div>
+  );
+}
+
 type StyleOption = typeof DUMMY_STYLES[number]['id'];
 
 interface PageProps {
@@ -46,42 +88,64 @@ export function useUserSessions(uid: string | null) {
         
       if (!error && data) {
           const sessionDict: Record<string, any> = {};
-          data.forEach(row => { sessionDict[row.platform] = { ...row, authStatus: 'checking' }; });
+          // Step 1: Immediately show platforms based on Supabase data (instant).
+          // If Supabase has a session row → show "connected" (optimistic, will verify in background).
+          // If no row → show "missing" (no browser check needed).
+          data.forEach(row => {
+            sessionDict[row.platform] = { ...row, authStatus: 'valid', _optimistic: true };
+          });
           ['korter', 'ssge', 'myhome'].forEach(platform => {
-            if (!sessionDict[platform]) sessionDict[platform] = { platform, authStatus: 'checking' };
+            if (!sessionDict[platform]) {
+              sessionDict[platform] = { platform, authStatus: 'missing' };
+            }
           });
           setSessions(sessionDict);
-           const { data: authData } = await supabase.auth.getSession();
-           const authHeaders = authData.session?.access_token
-             ? { 'Content-Type': 'application/json', Authorization: `Bearer ${authData.session.access_token}` }
-             : { 'Content-Type': 'application/json' };
-           const platformsToCheck = pendingRefreshRef.current || ['korter', 'ssge', 'myhome'];
-           pendingRefreshRef.current = null;
-           await Promise.all(platformsToCheck.map(async platform => {
-             try {
-               const response = await fetch('/api/auth/status', {
-                 method: 'POST', headers: authHeaders,
+
+          // Step 2: Background auth verification — NON-BLOCKING.
+          // Do NOT await this — let it run in background so UI stays responsive.
+          const { data: authData } = await supabase.auth.getSession();
+          const authHeaders = authData.session?.access_token
+            ? { 'Content-Type': 'application/json', Authorization: `Bearer ${authData.session.access_token}` }
+            : { 'Content-Type': 'application/json' };
+          const platformsToCheck = pendingRefreshRef.current || ['korter', 'ssge', 'myhome'];
+          pendingRefreshRef.current = null;
+
+          // Fire-and-forget: verify each platform in background, update UI as each completes
+          platformsToCheck.forEach(async platform => {
+            try {
+              const response = await fetch('/api/auth/status', {
+                method: 'POST', headers: authHeaders,
                 body: JSON.stringify({ userId: uid, siteKey: platform }),
               });
               const health = await response.json();
-              sessionDict[platform] = { ...sessionDict[platform], authStatus: health.status || 'unknown', health };
-              if (health.status === 'valid') {
-                try {
-                  const balanceResponse = await fetch('/api/auth/balance', {
-                    method: 'POST', headers: authHeaders,
-                    body: JSON.stringify({ userId: uid, siteKey: platform }),
-                  });
-                  const balance = await balanceResponse.json();
-                  sessionDict[platform] = { ...sessionDict[platform], balance };
-                } catch (error: any) {
-                  sessionDict[platform] = { ...sessionDict[platform], balance: { errors: [error.message] } };
+              // Only downgrade from 'valid' to 'expired' — never override optimistic 'valid' to 'unknown'
+              setSessions(prev => {
+                const current = prev[platform];
+                if (!current) return prev;
+                // If we already show 'valid' from Supabase and check confirms — keep it
+                if (current.authStatus === 'valid' && health.status === 'valid') {
+                  return { ...prev, [platform]: { ...current, authStatus: 'valid', health, _optimistic: false } };
                 }
+                // If check says expired/invalid — downgrade
+                if (health.status !== 'valid') {
+                  return { ...prev, [platform]: { ...current, authStatus: health.status || 'unknown', health, _optimistic: false } };
+                }
+                // Otherwise keep current state
+                return prev;
+              });
+              // Balance check: only if auth is valid, fire-and-forget
+              if (health.status === 'valid') {
+                fetch('/api/auth/balance', {
+                  method: 'POST', headers: authHeaders,
+                  body: JSON.stringify({ userId: uid, siteKey: platform }),
+                }).then(r => r.json()).then(balance => {
+                  setSessions(prev => ({ ...prev, [platform]: { ...prev[platform], balance } }));
+                }).catch(() => {});
               }
-            } catch (error: any) {
-              sessionDict[platform] = { ...sessionDict[platform], authStatus: 'unknown', health: { error: error.message } };
+            } catch {
+              // Don't change UI state on network error — keep optimistic status
             }
-          }));
-          setSessions({ ...sessionDict });
+          });
       }
     };
     
@@ -109,6 +173,8 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   const [photos, setPhotos] = useState<string[]>([]);
   const [parsedData, setParsedData] = useState<any>(null);
   const [addressCoords, setAddressCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const showToast = (message: string, type: ToastType = 'error') => setToast({ message, type });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -132,12 +198,34 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
     tg?.expand?.();
     tg?.disableVerticalSwipes?.();
 
+    // Lock viewport to device-width — prevents iOS zoom on input focus
+    const lockViewport = () => {
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (meta) {
+        meta.setAttribute('content',
+          'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover');
+      }
+    };
+    lockViewport();
+    setTimeout(lockViewport, 300);
+    setTimeout(lockViewport, 1000);
+
+    // Track visual viewport for keyboard height
     const updateViewport = () => {
       const visualHeight = window.visualViewport?.height || window.innerHeight;
       const layoutHeight = window.innerHeight;
+      const isKeyboardOpen = layoutHeight - visualHeight > 120;
       document.documentElement.style.setProperty('--tg-viewport-height', `${visualHeight}px`);
       setViewportHeight(visualHeight);
-      setKeyboardOpen(layoutHeight - visualHeight > 120);
+      setKeyboardOpen(isKeyboardOpen);
+      lockViewport();
+      // Keep app pinned to top when keyboard opens — prevent zoom-to-field
+      if (isKeyboardOpen) {
+        requestAnimationFrame(() => {
+          window.scrollTo(0, 0);
+          document.documentElement.scrollTop = 0;
+        });
+      }
     };
     const viewport = window.visualViewport;
     updateViewport();
@@ -145,18 +233,26 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
     viewport?.addEventListener('resize', updateViewport);
     tg?.onEvent?.('viewportChanged', updateViewport);
 
-    const handleFieldFocus = (event: FocusEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target || !['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-      window.setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250);
+    // Re-lock viewport on input focus (Telegram/iOS may override it)
+    const handleFieldFocus = (e: FocusEvent) => {
+      const tag = e.target && (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        lockViewport();
+        // Prevent iOS/Telegram from scrolling to focused field — keep full app visible
+        requestAnimationFrame(() => {
+          window.scrollTo(0, 0);
+          document.documentElement.scrollTop = 0;
+          document.body.scrollTop = 0;
+        });
+      }
     };
-    document.addEventListener('focusin', handleFieldFocus);
+    document.addEventListener('focusin', handleFieldFocus, true);
 
     return () => {
       window.removeEventListener('resize', updateViewport);
       viewport?.removeEventListener('resize', updateViewport);
       tg?.offEvent?.('viewportChanged', updateViewport);
-      document.removeEventListener('focusin', handleFieldFocus);
+      document.removeEventListener('focusin', handleFieldFocus, true);
     };
   }, []);
 
@@ -173,6 +269,9 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
   return (
     <div className={`mini-app-root ${isTelegramMiniApp ? 'mini-telegram-app' : ''} ${keyboardOpen ? 'mini-keyboard-open' : ''} fixed inset-0 flex justify-center w-full bg-slate-50 dark:bg-[#050505] font-sans text-slate-900 dark:text-gray-200 selection:bg-[#533afd]/20 selection:text-[#533afd] transition-colors duration-500 overflow-hidden z-50`} style={{ '--tg-viewport-height': `${viewportHeight}px` } as React.CSSProperties}>
       <div className={`mini-app-shell w-full h-full sm:max-w-[375px] sm:h-[750px] sm:my-auto bg-white dark:bg-[#0F0F0F] relative flex flex-col sm:rounded-[32px] sm:border border-slate-200/80 dark:border-[#1A1A1A] ${ELEVATE_SHADOW} overflow-hidden transition-colors duration-500`}>
+        <AnimatePresence>
+          {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        </AnimatePresence>
         
         {/* Header theme toggle inside the phone app, right corner */}
         <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
@@ -201,8 +300,9 @@ export function MiniApp({ theme, toggleTheme }: PageProps) {
                   photosState={[photos, setPhotos]}
                   parsedDataState={[parsedData, setParsedData]}
                   addressCoordsState={[addressCoords, setAddressCoords]}
+                  showToast={showToast}
                 />}
-              {activeTab === "history" && <HistoryTab uid={uid} />}
+              {activeTab === "history" && <HistoryTab uid={uid} showToast={showToast} />}
               {activeTab === "presentations" && <PresentationsTab uid={uid} />}
               {activeTab === "planner" && <PlannerTab uid={uid} />}
             </motion.div>
@@ -272,14 +372,16 @@ let modulePublishLock = { current: false };
 
 export function CreateTab({ 
   uid, 
-  descState, styleState, photosState, parsedDataState, addressCoordsState
+  descState, styleState, photosState, parsedDataState, addressCoordsState,
+  showToast
 }: { 
   uid: string | null, 
   descState: [string, React.Dispatch<React.SetStateAction<string>>],
   styleState: [StyleOption, React.Dispatch<React.SetStateAction<StyleOption>>],
   photosState: [string[], React.Dispatch<React.SetStateAction<string[]>>],
   parsedDataState: [any, React.Dispatch<React.SetStateAction<any>>],
-  addressCoordsState: [{lat: number, lng: number} | null, React.Dispatch<React.SetStateAction<{lat: number, lng: number} | null>>]
+  addressCoordsState: [{lat: number, lng: number} | null, React.Dispatch<React.SetStateAction<{lat: number, lng: number} | null>>],
+  showToast: (message: string, type?: ToastType) => void
 }) {
   const [desc, setDesc] = descState;
   const [selectedStyle, setSelectedStyle] = styleState;
@@ -321,8 +423,10 @@ export function CreateTab({
     setSelectedPlatforms(prev => {
       const next = { ...prev };
       Object.keys(sessions).forEach(key => {
-        if (next[key] === undefined) {
+        if (next[key] === undefined && sessions[key]?.authStatus === 'valid') {
           next[key] = true;
+        } else if (next[key] === undefined) {
+          next[key] = false;
         }
       });
       return next;
@@ -361,6 +465,10 @@ export function CreateTab({
           signal: ac.signal,
           body: JSON.stringify({ text: desc, styleId: 'original' }) // Always pass original for background parsing
         });
+        if (!res.ok) {
+          console.warn('[AI] parse-listing returned', res.status);
+          return;
+        }
         const data = await res.json();
         setParsedData(data ? { ...data, enhanced_text: data.enhanced_text || '' } : null);
         if (data && data.address && data.lat && data.lng) {
@@ -386,17 +494,32 @@ export function CreateTab({
     
     setActiveEnhance(styleId);
     try {
+      let authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) authHeaders['Authorization'] = `Bearer ${session.access_token}`;
+      } catch {}
       const res = await fetch('/api/parse-listing', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: authHeaders,
         body: JSON.stringify({ text: desc, styleId })
       });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        console.error('[AI enhance] HTTP error:', res.status, errBody);
+        showToast('Сервис временно недоступен. Попробуйте позже');
+        return;
+      }
       const data = await res.json();
       if (data?.enhanced_text) {
         setDesc(data.enhanced_text);
+      } else {
+        console.error('[AI enhance] no enhanced_text in response:', data);
+        showToast('Не удалось улучшить текст. Попробуйте другой стиль');
       }
     } catch (err) {
-      console.error(err);
+      console.error('[AI enhance] network error:', err);
+      showToast('Проверьте соединение и попробуйте снова');
     } finally {
       setActiveEnhance(null);
     }
@@ -462,7 +585,7 @@ export function CreateTab({
     if (publishLock.current) return;
     if (!desc.trim()) return;
     if (!uid) {
-      alert("Авторизуйтесь для публикации");
+      showToast("Войдите в приложение для публикации");
       return;
     }
 
@@ -471,7 +594,7 @@ export function CreateTab({
     const telegramContext = { telegramChatId: (window.Telegram?.WebApp as any)?.initDataUnsafe?.user?.id || '', telegramUsername: (window.Telegram?.WebApp as any)?.initDataUnsafe?.user?.username || '' };
 
       if (activePlatformNames.length === 0) {
-      alert("Выберите хотя бы одну площадку для публикации");
+      showToast("Выберите площадку для публикации");
       return;
     }
 
@@ -481,26 +604,29 @@ export function CreateTab({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        alert('Сессия пользователя истекла. Обновите приложение и повторите попытку.');
+        showToast('Обновите приложение и попробуйте снова');
         return;
       }
       const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` };
       const preflightResponse = await fetch('/api/publish/preflight', { method: 'POST', headers: authHeaders, body: JSON.stringify({ userId: uid, text: desc, parsedData, photos, sites: activePlatformNames }) });
       const preflight = await preflightResponse.json();
       if (!preflightResponse.ok) {
-         alert(preflight.error || 'Описание не готово к публикации. Проверьте обязательные поля.');
+         console.error('[Publish] preflight error:', preflight);
+         showToast('Не удалось проверить данные. Попробуйте позже');
          return;
       }
       if (!preflight.ready) {
-        const siteNames: Record<string, string> = { ssge: 'SS.ge', myhome: 'MyHome', korter: 'Korter' };
+        const siteNames: Record<string, string> = { ssge: 'SS.ge', ss_ge: 'SS.ge', myhome: 'MyHome', myhome_ge: 'MyHome', korter: 'Korter', korter_ge: 'Korter' };
         const errors = (preflight.checks || []).flatMap((check: any) =>
           (check.errors || []).map((error: string) => `${siteNames[check.site] || check.site}: ${error}`)
         );
-        alert(`Публикация пока недоступна:\n${errors.join('\n') || 'Проверьте авторизацию и баланс площадок.'}`);
+        console.error('[Publish] preflight not ready:', errors);
+        const details = errors.length > 0 ? `\n${errors.join('\n')}` : '';
+        showToast(`Не хватает данных:${details || ' заполните обязательные поля'}`);
         return;
       }
       const warnings = (preflight.checks || []).flatMap((check: any) => check.warnings || []);
-      if (warnings.length) alert(`Предупреждение перед публикацией:\n${warnings.join('\n')}`);
+      if (warnings.length) showToast('Некоторые поля заполнены частично', 'warning');
       // Real title calculation
       const displayTitle = [parsedRooms ? `${parsedRooms}-к. квартира` : 'Объект', parsedArea].filter(Boolean).join(', ');
 
@@ -582,20 +708,20 @@ export function CreateTab({
       setParsedData(null);
       setAddressCoords(null);
       setPhotos([]);
-      alert("Публикация начата. Вы можете следить за статусом в Истории объектов.");
+      showToast("Публикация начата! Следите за статусом в Истории", 'success');
     } catch (e: any) {
-      console.error(e);
-      alert(`Ошибка при публикации: ${e.message}`);
+      console.error('[Publish] error:', e);
+      showToast("Не удалось начать публикацию. Попробуйте позже");
     } finally {
       if (!backgroundPolling) { publishLock.current = false; setIsPublishing(false); }
     }
   };
 
   if (activeSiteAuth === 'korter') {
-    return <KorterAuth onBack={() => { setActiveSiteAuth(null); refreshSessions('korter'); }} userId={uid || 'anonymous_user'} />;
+    return <KorterAuth onBack={() => { setActiveSiteAuth(null); setTimeout(() => refreshSessions('korter'), 500); }} userId={uid || 'anonymous_user'} />;
   }
   if (activeSiteAuth && activeSiteAuth !== 'korter') {
-    return <PlatformLoginAuth onBack={() => { const site = activeSiteAuth; setActiveSiteAuth(null); refreshSessions(site || undefined); }} siteKey={activeSiteAuth} userId={uid || 'anonymous_user'} />;
+    return <PlatformLoginAuth onBack={() => { const site = activeSiteAuth; setActiveSiteAuth(null); setTimeout(() => refreshSessions(site || undefined), 500); }} siteKey={activeSiteAuth} userId={uid || 'anonymous_user'} />;
   }
 
   return (
@@ -624,7 +750,8 @@ export function CreateTab({
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               placeholder={"Например: 2к квартира у моря в Батуми, 55 метров, 120 000 $..."}
-              className="w-full h-32 bg-transparent text-[15px] sm:text-[16px] text-slate-900 dark:text-gray-200 placeholder:text-slate-600 dark:placeholder:text-gray-600 focus:outline-none resize-none border-none leading-relaxed" 
+              style={{ fontSize: '16px', lineHeight: '1.5', WebkitTextSizeAdjust: '100%', touchAction: 'manipulation', height: '8rem' } as React.CSSProperties}
+              className="w-full bg-transparent text-slate-900 dark:text-gray-200 placeholder:text-slate-600 dark:placeholder:text-gray-600 focus:outline-none resize-none border-none"
             />
             
             <div className="mt-2 pt-3 border-t border-slate-200/80 dark:border-white/5">
@@ -680,9 +807,11 @@ export function CreateTab({
                   </div>
                 )}
                 {missingFields.length > 0 && (
-                  <div className="w-full mt-1 bg-[#fff1f2] dark:bg-[#e71d36]/10 border border-[#e71d36]/20 py-1.5 px-2.5 rounded-md text-[11px] text-[#e71d36] font-medium flex items-start gap-1.5 leading-snug">
-                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                    <span>Для публикации не хватает: {missingFields.join(', ')}. Пожалуйста, добавьте их в описание.</span>
+                  <div className="w-full mt-2 bg-gradient-to-r from-[#fff1f2] to-[#ffe4e6] dark:from-[#e71d36]/10 dark:to-[#ff4264]/5 border border-[#e71d36]/20 dark:border-[#e71d36]/30 py-2 px-3 rounded-xl text-[11px] text-[#e71d36] font-medium flex items-start gap-2 leading-snug shadow-sm">
+                    <div className="w-5 h-5 rounded-full bg-[#e71d36]/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <AlertCircle size={12} className="text-[#e71d36]" />
+                    </div>
+                    <span><span className="font-bold">Не хватает:</span> {missingFields.join(', ')}</span>
                   </div>
                 )}
               </div>
@@ -774,7 +903,10 @@ export function CreateTab({
                     <div>
                       <p className="text-[14px] font-semibold text-slate-900 dark:text-white/90">{name}</p>
                       {connected ? (
-                        <p className="text-[10px] text-[#15be53] font-bold">Подключена</p>
+                        <p className="text-[10px] text-[#15be53] font-bold">
+                          {sessions[key]?._optimistic ? 'Подключена' : 'Подключена'}
+                          {sessions[key]?._optimistic && <span className="ml-1 text-[#15be53]/50 font-normal">· проверка</span>}
+                        </p>
                       ) : status === 'expired' ? (
                         <p className="text-[10px] text-amber-600 font-bold">Требуется повторный вход</p>
                       ) : status === 'checking' ? (
@@ -970,7 +1102,7 @@ function PlatformAuthCard({ name, siteKey, isConnected, balance, logoBg, logoCol
   );
 }
 
-function HistoryTab({ uid }: { uid: string | null }) {
+function HistoryTab({ uid, showToast }: { uid: string | null; showToast: (message: string, type?: ToastType) => void }) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1314,8 +1446,8 @@ function HistoryTab({ uid }: { uid: string | null }) {
                      const result = await response.json();
                      if (!response.ok || !result.success) throw new Error(result.error || 'Не удалось удалить объявление на всех выбранных площадках');
                      setHistory(prev => prev.filter(h => h.id !== listingId));
-                  } catch(e: any) { console.error(e); alert(`Ошибка удаления: ${e.message || e}`); }
-                  setSelectedPlatformsForAction([]);
+                   } catch(e: any) { console.error('[Delete]', e); showToast('Не удалось удалить объявление'); }
+                   setSelectedPlatformsForAction([]);
                 }} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[13px] font-semibold">Удалить</button>
               </div>
             </div>
@@ -1350,7 +1482,7 @@ function HistoryTab({ uid }: { uid: string | null }) {
                      const result = await response.json();
                      if (!response.ok || !result.success) throw new Error(result.error || 'Не удалось републиковать объявление');
                      setHistory(prev => prev.map(h => h.id === listingId ? { ...h, status: 'publishing' } : h));
-                  } catch(e: any) { console.error(e); alert(`Ошибка републикации: ${e.message || e}`); }
+                   } catch(e: any) { console.error('[Republish]', e); showToast('Не удалось републиковать объявление'); }
                   setSelectedPlatformsForAction([]);
                 }} className="flex-1 py-2.5 bg-[#533afd] text-white rounded-xl text-[13px] font-semibold">Републикация</button>
               </div>

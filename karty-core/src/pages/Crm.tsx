@@ -315,26 +315,212 @@ function LeadsWorkspace() {
 }
 
 function Finances({ userRole }: { userRole: 'admin' | 'manager' }) {
+  const [plans, setPlans] = useState<any[]>([]);
+  const [usage, setUsage] = useState<any>(null);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [editingPlan, setEditingPlan] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [plansRes, usageRes] = await Promise.all([
+        fetch('/api/billing/plans'),
+        crmFetch('/api/billing/status'),
+      ]);
+      const plansData = await plansRes.json();
+      setPlans(plansData.plans || []);
+
+      if (usageRes.ok) {
+        const usageData = await usageRes.json();
+        setUsage(usageData);
+      }
+
+      if (userRole === 'admin') {
+        const paymentsRes = await crmFetch('/api/billing/payments');
+        if (paymentsRes.ok) {
+          const paymentsData = await paymentsRes.json();
+          setPayments(paymentsData.payments || []);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load billing data:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const handlePriceUpdate = async (planId: string) => {
+    const cents = Math.round(parseFloat(editPrice) * 100);
+    if (isNaN(cents) || cents <= 0) return;
+    try {
+      await crmFetch(`/api/billing/plans/${planId}/price`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price_cents: cents }),
+      });
+      setEditingPlan(null);
+      loadData();
+    } catch (e) {
+      console.error('Failed to update price:', e);
+    }
+  };
+
+  const handleToggleActive = async (planId: string, currentActive: number) => {
+    try {
+      await crmFetch(`/api/billing/plans/${planId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: currentActive ? 0 : 1 }),
+      });
+      loadData();
+    } catch (e) {
+      console.error('Failed to toggle plan:', e);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-6 h-6 border-2 border-[#533afd] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Usage Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard title="Всего заработано" value="—" trend="Нет данных" />
-        <StatCard title="Выплачено" value="—" trend="Нет данных" />
+        <StatCard
+          title="Публикации"
+          value={usage ? (usage.has_subscription ? '∞' : `${usage.listings_used}/${usage.listings_limit}`) : '—'}
+          trend={usage?.has_subscription ? `Активна: ${usage.plan_name || '—'}` : 'Бесплатный план'}
+        />
+        <StatCard
+          title="Презентации"
+          value={usage ? (usage.has_subscription ? '∞' : `${usage.presentations_used}/${usage.presentations_limit}`) : '—'}
+          trend={usage?.has_subscription ? 'Безлимит' : 'Бесплатный план'}
+        />
         <div className="bg-[#533afd] rounded-2xl p-6 shadow-lg shadow-[#533afd]/20 flex flex-col justify-between text-white relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl flex items-center justify-center" />
-          <span className="text-white/70 font-semibold text-[13px] tracking-wide uppercase">Доступно сейчас</span>
+          <span className="text-white/70 font-semibold text-[13px] tracking-wide uppercase">Статус</span>
           <div>
-            <div className="text-[36px] font-bold tracking-tight leading-none mb-3">—</div>
+            <div className="text-[36px] font-bold tracking-tight leading-none mb-3">
+              {usage?.has_subscription ? 'Pro' : 'Free'}
+            </div>
+            {usage?.has_subscription && usage.expires_at && (
+              <div className="text-white/60 text-sm">до {new Date(usage.expires_at).toLocaleDateString('ru')}</div>
+            )}
           </div>
         </div>
       </div>
-      
+
+      {/* Plans Management (admin) */}
       {userRole === 'admin' && (
         <div className="bg-[#ffffff] dark:bg-[#0F0F0F] rounded-2xl border border-[#e5edf5] dark:border-[#1A1A1A] p-6 shadow-sm">
-          <h3 className="text-[16px] font-bold mb-4">Запросы на выплату</h3>
-          <div className="text-[14px] text-[#64748d] py-8 text-center">
-            Нет запросов на выплату
+          <h3 className="text-[16px] font-bold mb-4">Тарифные планы</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[#64748d] border-b border-[#e5edf5] dark:border-[#1A1A1A]">
+                  <th className="pb-3 font-medium">План</th>
+                  <th className="pb-3 font-medium">Интервал</th>
+                  <th className="pb-3 font-medium">Цена</th>
+                  <th className="pb-3 font-medium">Статус</th>
+                  <th className="pb-3 font-medium">Действия</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e5edf5] dark:divide-[#1A1A1A]">
+                {plans.map(plan => (
+                  <tr key={plan.id} className="hover:bg-[#f8fafc] dark:hover:bg-[#141414]">
+                    <td className="py-3 font-medium">{plan.name}</td>
+                    <td className="py-3 text-[#64748d]">
+                      {plan.interval === 'month' ? 'Месяц' : plan.interval === 'quarter' ? '3 месяца' : plan.interval === 'halfyear' ? '6 месяцев' : plan.interval === 'year' ? 'Год' : plan.interval}
+                    </td>
+                    <td className="py-3">
+                      {editingPlan === plan.id ? (
+                        <div className="flex items-center gap-2">
+                          <span>$</span>
+                          <input
+                            type="number"
+                            value={editPrice}
+                            onChange={(e) => setEditPrice(e.target.value)}
+                            className="w-20 px-2 py-1 border border-[#e5edf5] dark:border-[#1A1A1A] rounded-lg text-sm bg-transparent"
+                            autoFocus
+                            onKeyDown={(e) => { if (e.key === 'Enter') handlePriceUpdate(plan.id); if (e.key === 'Escape') setEditingPlan(null); }}
+                          />
+                          <button onClick={() => handlePriceUpdate(plan.id)} className="text-[#533afd] text-xs font-medium">OK</button>
+                          <button onClick={() => setEditingPlan(null)} className="text-[#64748d] text-xs">Отмена</button>
+                        </div>
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:text-[#533afd]"
+                          onClick={() => { setEditingPlan(plan.id); setEditPrice(String(plan.price_cents / 100)); }}
+                        >
+                          {plan.price_display}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${plan.active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                        {plan.active ? 'Активен' : 'Выкл'}
+                      </span>
+                    </td>
+                    <td className="py-3">
+                      <button
+                        onClick={() => handleToggleActive(plan.id, plan.active)}
+                        className="text-xs text-[#64748d] hover:text-[#533afd] transition-colors"
+                      >
+                        {plan.active ? 'Выключить' : 'Включить'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        </div>
+      )}
+
+      {/* Payment History (admin) */}
+      {userRole === 'admin' && (
+        <div className="bg-[#ffffff] dark:bg-[#0F0F0F] rounded-2xl border border-[#e5edf5] dark:border-[#1A1A1A] p-6 shadow-sm">
+          <h3 className="text-[16px] font-bold mb-4">История платежей</h3>
+          {payments.length === 0 ? (
+            <div className="text-[14px] text-[#64748d] py-8 text-center">Нет платежей</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[#64748d] border-b border-[#e5edf5] dark:border-[#1A1A1A]">
+                    <th className="pb-3 font-medium">Дата</th>
+                    <th className="pb-3 font-medium">Пользователь</th>
+                    <th className="pb-3 font-medium">План</th>
+                    <th className="pb-3 font-medium">Сумма</th>
+                    <th className="pb-3 font-medium">Статус</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#e5edf5] dark:divide-[#1A1A1A]">
+                  {payments.map((p: any) => (
+                    <tr key={p.id} className="hover:bg-[#f8fafc] dark:hover:bg-[#141414]">
+                      <td className="py-3">{new Date(p.created_at).toLocaleDateString('ru')}</td>
+                      <td className="py-3 text-[#64748d] font-mono text-xs">{p.user_id?.slice(0, 8)}...</td>
+                      <td className="py-3">{p.plan_name || p.plan_id}</td>
+                      <td className="py-3 font-medium">${(p.amount_cents / 100).toFixed(2)}</td>
+                      <td className="py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          {p.status === 'completed' ? 'Завершён' : p.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -602,6 +788,22 @@ function SettingsPanel() {
             *Система автоматически будет пушить менеджеров в этот бот, если они не прочитали сообщение клиента в течение 2 минут.
           </p>
         </div>
+      </div>
+
+      <div className="bg-[#ffffff] dark:bg-[#0F0F0F] border border-[#e5edf5] dark:border-[#1A1A1A] rounded-2xl p-6 shadow-sm">
+        <h3 className="text-[16px] font-bold mb-2 text-[#061b31] dark:text-white">Очистка данных</h3>
+        <p className="text-[12px] text-[#64748d] mb-4">Удалить все диалоги и сообщения из CRM. Это действие необратимо.</p>
+        <button
+          onClick={async () => {
+            if (!confirm('Вы уверены? Все диалоги и сообщения будут удалены безвозвратно.')) return;
+            const res = await crmFetch('/api/crm/chats', { method: 'DELETE', headers });
+            if (res.ok) alert('Все диалоги удалены');
+            else alert('Ошибка при удалении');
+          }}
+          className="px-5 py-2.5 bg-[#e71d36]/10 text-[#e71d36] rounded-xl text-[14px] font-bold hover:bg-[#e71d36]/20 transition-all"
+        >
+          Очистить все диалоги
+        </button>
       </div>
     </div>
   );

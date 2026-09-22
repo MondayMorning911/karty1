@@ -11,9 +11,32 @@
     --tg-viewport-height: 100dvh;
   }
 
+  html {
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+    /* Prevent pinch-to-zoom on the document */
+    touch-action: pan-x pan-y !important;
+    /* Prevent horizontal scroll/shift after zoom */
+    overflow-x: hidden;
+  }
+
   body {
     @apply bg-[#f6f9fc] dark:bg-[#050505] text-[#425466] dark:text-gray-300;
+    -webkit-text-size-adjust: 100%;
+    overflow: hidden;
+    /* Prevent any horizontal shift */
+    width: 100%;
+    position: relative;
   }
+
+  /* iOS auto-zooms inputs with font-size < 16px — enforce 16px everywhere */
+  input, textarea, select, [contenteditable] {
+    font-size: 16px !important;
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+    touch-action: manipulation !important;
+  }
+
   ::-webkit-scrollbar {
     width: 0px;
     background: transparent;
@@ -88,17 +111,37 @@
   display: none;
 }
 
+/* When keyboard is open: scroll content, publish bar floats at bottom of viewport */
+.mini-telegram-app.mini-keyboard-open .mini-app-shell {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mini-telegram-app.mini-keyboard-open .mini-app-shell > main {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+}
+
 .mini-telegram-app.mini-keyboard-open .mini-publish-bar {
-  position: fixed;
+  position: sticky;
+  bottom: 0;
   left: 0;
   right: 0;
-  bottom: max(env(safe-area-inset-bottom), calc(100vh - var(--tg-viewport-height)));
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 40;
   background: linear-gradient(to top, rgba(246, 249, 252, 0.98), rgba(246, 249, 252, 0.9), transparent);
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
 .dark .mini-telegram-app.mini-keyboard-open .mini-publish-bar {
   background: linear-gradient(to top, rgba(5, 5, 5, 0.98), rgba(5, 5, 5, 0.9), transparent);
+}
+
+/* Global anti-horizontal-shift for the mini-app root */
+.mini-app-root {
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 767px) {
@@ -106,6 +149,12 @@
   .mini-app-shell {
     height: var(--tg-viewport-height) !important;
     max-height: var(--tg-viewport-height);
+  }
+
+  .mini-app-root input,
+  .mini-app-root textarea,
+  .mini-app-root select {
+    font-size: 16px !important;
   }
 
   .mini-app-root .mini-publish-bar {
@@ -116,13 +165,26 @@
     display: none;
   }
 
+  .mini-keyboard-open .mini-app-shell {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mini-keyboard-open .mini-app-shell > main {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+  }
+
   .mini-keyboard-open .mini-publish-bar {
-    position: fixed;
+    position: sticky;
+    bottom: 0;
     left: 0;
     right: 0;
-    bottom: max(env(safe-area-inset-bottom), calc(100vh - var(--tg-viewport-height)));
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    z-index: 40;
     background: linear-gradient(to top, rgba(246, 249, 252, 0.98), rgba(246, 249, 252, 0.9), transparent);
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 
   .dark .mini-keyboard-open .mini-publish-bar {

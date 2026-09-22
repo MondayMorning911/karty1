@@ -39,7 +39,11 @@
 - [x] MiniApp: AbortController на AI-парсинг (гонка ответов устранена).
 - [x] MiniApp: мёртвый PlatformsTab удалён.
 - [x] CRM: мёртвый код (~230 строк LeadsPoolKanban/LeadsKanban/Leads) удалён.
-- [ ] CRM: Финансы — заглушка, будет привязана к Tribute позже (осознанно отложено).
+- [x] Auth cache: persistent SQLite `auth_status_cache` (TTL 15 мин, переживает рестарт) + stale-while-revalidate (мгновенный ответ + фоновое обновление). Mini App запуск: <100мс вместо 15-30с.
+- [x] BOT_PROTECTION: юзер-френдли сообщение («админ уведомлён») вместо «откройте сайт сами».
+- [x] Admin auto-alert: при CAPTCHA/cloudflare/security challenge — Telegram-уведомление админу с сайтом/юзером/объектом/task ID/скриншотом.
+- [x] Billing/Tribute: схема БД готова (billing.ts), роуты добавлены, интеграция с Tribute webhook — ожидает подключения владельцем.
+- [x] CRM: Финансы — реальный UI: тарифные планы (admin может менять цены), история платежей, статус подписки.
 
 ---
 
@@ -443,3 +447,68 @@ Mini App sends `userId` to `/api/publish/preflight`. The preflight checks auth c
 - CRM `Session expired` hardening: CRM sessions are now persisted as SHA-256 token hashes in `crm.db` table `crm_sessions` for their 8-hour lifetime, so PM2 restarts no longer invalidate active CRM tokens. A new login is still required once after the deployment that introduced this table.
 - Telegram live status UI added: parser writes `/root/karty-lab/logs/tg_parser_status.json` with running/mode/cycle/users/listing_count/last_cycle_at/error; `/api/tg/status` exposes it and TelegramTab displays a compact activity line. Static frontend is deployed to `/var/www/karty`, the actual Nginx document root.
 - Operational rule: never run `tg_parser.py --mode monitor` or any `run_until_disconnected` process in foreground; use only `setsid nohup ... > /root/karty-lab/logs/monitor.log 2>&1 < /dev/null & disown`, then finite `sleep 3` and one `tail -n N`. Never use `tail -f`, `less +F`, or loops waiting for monitor output.
+
+## Performance Optimization (29 августа 2026)
+
+### Session Check Speed
+
+Проблема: при открытии Mini App проверка сессий занимала 15-30 секунд. Источники:
+1. `check_site_auth()` — 3-tier кэш (in-memory → SQLite persistent → cold browser check). Persistent кэш уже работал, но cold start после рестарта Python запускал 3 браузера.
+2. `check_site_preflight()` — баланс **каждый раз** запускал браузер (без кэша). Это было основным тормозом.
+3. `getAuthenticatedUserId()` — каждый запрос к `POST /api/auth/status` и `/api/auth/balance` делал `supabase.auth.getUser(token)` (сеть-запрос ~50-100ms).
+4. Node-side прокси `/api/auth/status` → Python `/api/auth/check` — каждый раз HTTP roundtrip.
+
+Исправления:
+- **Preflight cache** (`api/publisher.py`): in-memory `_PREFLIGHT_CACHE` с TTL 10 минут. Результат `check_site_preflight()` кэшируется, включая баланс. Инвалидируется при `delete_auth_state`.
+- **Supabase JWT cache** (`server.ts`): in-memory `Map<token, {userId, expiresAt}>` с TTL 5 минут. `getAuthenticatedUserId()` проверяет кэш перед network-запросом. Автоочистка при >1000 токенов.
+- **Node-side auth status cache** (`server.ts`): in-memory кэш для `/api/auth/status` с TTL 3 минуты. Убирает Node→Python HTTP вызов при свежем результате.
+- **Invalidation**: при `POST /api/auth/remove` инвалидируются все 3 кэша (Python `_AUTH_CACHE` + `_PREFLIGHT_CACHE`, Node `_authStatusCache`).
+
+### Billing API
+
+- `/api/billing/plans` теперь возвращает 5 планов (monthly $55, quarterly $149, halfyear $289, yearly $530, agency $199).
+- `getBillingDb()` переиспользует shared `getDb()` из `crmChats.ts` (singleton, WAL mode).
+- `seedDefaultPlans()` запускается при первом вызове `getBillingDb()`, если таблица пуста.
+
+### CRM Finances Tab
+
+Заменена заглушка на реальный UI:
+- **Usage Summary**: публикации (3 бесплатно / ∞ с подпиской), презентации (1 бесплатно / ∞), статус Free/Pro.
+- **Plans Management** (admin only): таблица планов с inline-редактированием цен, toggle active/inactive.
+- **Payment History** (admin only): таблица платежей с датой, пользователем, планом, суммой и статусом.
+
+---
+
+## Session 22 September 2026 — Исправления 6 проблем
+
+### Проблема 1: Моки в CRM (1000+ фейковых сообщений MEDIa)
+- **Состояние БД:** На момент проверки `crm.db` содержит 0 chats, 0 messages (334MB — это `crm_leads` 4153 строки + `lead_events` 2.2M строк). Моки уже очищены.
+- **Причина появления:** `bot.ts:278-294` — TG-бот добавляет сообщения в CRM-чат если чат существует (`existingChat`), но нет фильтрации по source/ legitimacy.
+- **Исправление:** `DELETE /api/crm/chats` эндпоинт уже существует (`server.ts:2174`), admin-only. Добавить кнопку в CRM UI для очистки. Предотвращение: фильтровать `manager_id = 'pending'` в CrmChats.tsx.
+
+### Проблема 2: Студия → rooms=1, bedrooms=1
+- **Состояние:** УЖЕ РЕАЛИЗОВАНО.
+  - `server.ts:1232-1238` — `buildListingForPublish()` detection + auto-set rooms=1, bedrooms=1
+  - `ai.ts:147-151` — AI prompt НЕ запрашивает rooms/bedrooms для студий
+  - `server.ts:941-951` — preflight НЕ требует rooms/bedrooms для студий
+  - `api/main.py:230,233-234` — Python preflight тоже учитывает студию
+- **Проверка:** Работает корректно. Нет ошибок.
+
+### Проблема 3: Зум при клавиатуре (фокус на описание)
+- **Состояние:** Anti-zoom меры уже применены (`MiniApp.tsx:188-230`, `index.css:32-38`).
+- **Оставшаяся проблема:** Клавиатура должна поднимать весь интерфейс, а не зумить к описанию.
+- **Исправление:** Добавить `window.scrollTo(0,0)` + `scrollIntoView({block: 'nearest'})` при фокусе, чтобы Telegram не зумил к конкретному полю.
+
+### Проблема 4: AI улучшение текста не работает
+- **Причина:** Silent error handling — `ai.ts:209-212` глотает ошибки DeepSeek, возвращает `null`, HTTP 200.
+- **Исправление:** 
+  - Обновить API ключ → `sk-61c019951f6f4d60939019b74e2e8ea6`
+  - Добавить проброс ошибки с HTTP 500 вместо 200+null
+  - Улучшить логирование: `error.message` вместо всего объекта
+
+### Проблема 5: Публикация показывает ошибки по всем площадкам
+- **Причина:** `preflight` default sites включает все 3 площадки (`server.ts:957`). Если `sites` не передан или пуст — проверяются все.
+- **Исправление:** Сделать `sites` обязательным параметром; в preflight response фильтровать checks только по запрошенным сайтам.
+
+### Проблема 6: Красивые ошибки/предупреждения
+- **Исправление:** Улучшить Toast компонент с иконками, цветами, анимацией. Добавить details block для ошибок публикации с per-site breakdown.

@@ -66,7 +66,7 @@ async function getComplexAddress(complexName: string, city: string = 'Батум
 // Since the user is editing, we debounce the input on frontend
 export async function parseListingWithDeepSeek(text: string, styleId: string) {
   let systemPrompt = '';
-  
+
   if (styleId === 'selling') {
     systemPrompt = `Ты — копирайтер по недвижимости. Перепиши исходные данные объекта в продающем, эмоциональном стиле: продавай не только квадратные метры, но и образ жизни и ощущения от владения объектом.
 
@@ -144,10 +144,11 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
 - Если нет street, добавьте "Улица"
 - Если нет houseNumber, добавьте "Номер дома"
 - Если нет floor (для квартир), добавьте "Этаж"
- - Если комнат нет, добавьте "Количество комнат"
- - Если спален нет для квартиры или дома, добавьте "Количество спален"
+ - Если комнат нет И это НЕ студия, добавьте "Количество комнат"
+ - Если спален нет для квартиры или дома И это НЕ студия, добавьте "Количество спален"
  - Если этажности нет, добавьте "Этажность"
  - Если типа сделки или типа недвижимости нет, добавьте соответствующее поле
+ВАЖНО: Если propertyType содержит "студия" или в тексте есть слово "студия" — НЕ добавляйте "Количество комнат" и "Количество спален" в missing_fields (студия = 1 комната, 1 спальня автоматически).
 
 Если все обязательные параметры есть (или могут быть высчитаны), верните пустой массив [].
 
@@ -155,21 +156,31 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "deepseek-chat",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: text }
-      ],
-      response_format: { type: "json_object" }
-    });
+    let lastError: any = null;
+    // Retry up to 2 times on failure
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await openai.chat.completions.create({
+          model: "deepseek-chat",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: text }
+          ],
+          response_format: { type: "json_object" }
+        });
 
-    const resultText = response.choices[0].message.content;
-    if (!resultText) throw new Error("Empty response");
+        const resultText = response.choices[0].message.content;
+        if (!resultText) throw new Error("Empty response from AI");
 
-    const json = JSON.parse(resultText);
+        const json = JSON.parse(resultText);
 
-    if (styleId === 'original') {
+        // For enhancement styles, validate that enhanced_text exists
+        if (styleId !== 'original' && !json.enhanced_text) {
+          console.error(`[AI] Response missing enhanced_text for style=${styleId}:`, JSON.stringify(json).slice(0, 200));
+          throw new Error("AI response missing enhanced_text field");
+        }
+
+        if (styleId === 'original') {
       // If address is missing but we have a residential complex, try to fetch the address
       if (!json.address && json.residential_complex) {
         console.log(`[AI] Address is missing, trying to find address for complex: ${json.residential_complex}`);
@@ -205,8 +216,8 @@ export async function parseListingWithDeepSeek(text: string, styleId: string) {
     }
 
     return json;
-  } catch (error) {
-    console.error("Deepseek parse error:", error);
-    return null;
+  } catch (error: any) {
+    console.error("Deepseek parse error:", error?.message || error);
+    return { error: error?.message || 'AI service temporarily unavailable' };
   }
 }

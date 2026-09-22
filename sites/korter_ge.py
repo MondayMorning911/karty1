@@ -89,11 +89,23 @@ class KorterGeSite(BaseSite):
     async def _verify_auth(self) -> bool:
         try:
             await self.page.goto("https://korter.ge/ru/", wait_until="domcontentloaded", timeout=TIMEOUT)
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
 
             is_logged = await self.page.evaluate("""() => {
-                const text = document.body.innerText;
-                return !text.includes('Войти');
+                // Check for user profile indicators (avatar, menu, logout) — positive auth signal
+                const profileIndicators = document.querySelectorAll('img[alt*="avatar"], img[alt*="profile"], [class*="avatar"], [class*="user-menu"], [class*="profile"]');
+                if (profileIndicators.length > 0) return true;
+                // Check for text that only appears when logged in
+                const bodyText = document.body.innerText;
+                if (bodyText.includes('Мои объявления') || bodyText.includes('Избранное') || bodyText.includes('Выход') || bodyText.includes('Выйти')) return true;
+                // Fallback: check header specifically for login button (not footer/nav links)
+                const headerEl = document.querySelector('header, nav, [class*="header"]');
+                if (headerEl) {
+                    const headerText = headerEl.innerText;
+                    return !headerText.includes('Войти');
+                }
+                // If no header found, just check for profile indicators
+                return false;
             }""")
             if is_logged:
                 self.log.info("Auth OK on korter.ge")

@@ -34,6 +34,9 @@ AUTH_CACHE_TTL = 300  # in-memory fallback
 PERSISTENT_CACHE_TTL = 900  # 15 min — survives restarts
 _STALE_REFRESHING: set[tuple[str, str]] = set()  # guards against duplicate background refreshes
 
+_PREFLIGHT_CACHE: dict[tuple[str, str], tuple[float, dict]] = {}
+PREFLIGHT_CACHE_TTL = 600  # 10 min — balance check is expensive (launches browser)
+
 
 def _read_persistent_auth(user_id: str, site: str) -> dict | None:
     """Read cached auth status from SQLite."""
@@ -77,7 +80,7 @@ async def _do_browser_auth_check(user_id: str, site_name: str) -> dict:
     try:
         await _launch_authenticated_site(site, get_storage_state(user_id, site_name), get_cookies(user_id, site_name), site_name, headless=True)
         await site.page.goto(site.base_url, wait_until="domcontentloaded", timeout=45000)
-        await asyncio.sleep(3)
+        await asyncio.sleep(1)
         valid = await site._verify_auth()
         if valid:
             save_storage_state(user_id, site_name, await site.context.storage_state())
@@ -470,7 +473,17 @@ async def _launch_authenticated_site(site, storage_state: dict | None, user_cook
 
 
 async def check_site_preflight(user_id: str, site_name: str) -> dict:
-    """Validate credentials and paid-site balance before creating a publish task."""
+    """Validate credentials and paid-site balance before creating a publish task.
+
+    Results are cached for 10 min to avoid repeated browser launches.
+    Reuses auth cache from check_site_auth() to skip redundant browser auth checks.
+    """
+    # Fast path: in-memory preflight cache
+    pf_key = (user_id, site_name)
+    pf_cached = _PREFLIGHT_CACHE.get(pf_key)
+    if pf_cached and time.monotonic() - pf_cached[0] < PREFLIGHT_CACHE_TTL:
+        return {**pf_cached[1], "cached": True}
+
     result = {
         "site": site_name,
         "auth": "missing" if not has_cookies(user_id, site_name) else "unknown",
@@ -486,6 +499,23 @@ async def check_site_preflight(user_id: str, site_name: str) -> dict:
         result["errors"].append("Сессия площадки не найдена. Войдите в аккаунт заново.")
         return result
 
+    # Reuse auth cache: if check_site_auth() already verified auth as valid,
+    # skip the browser auth check and go straight to balance (or return immediately for free sites).
+    auth_cache_key = (user_id, site_name)
+    auth_cached = _AUTH_CACHE.get(auth_cache_key)
+    auth_fresh = auth_cached and time.monotonic() - auth_cached[0] < AUTH_CACHE_TTL and auth_cached[1] == "valid"
+
+    if auth_fresh:
+        result["auth"] = "valid"
+        # For free sites (korter_ge), no balance check needed — return immediately
+        if site_name not in {"ss_ge", "myhome_ge"}:
+            _PREFLIGHT_CACHE[pf_key] = (time.monotonic(), result)
+            return result
+        # For paid sites, still need to check balance (requires browser)
+    else:
+        # No fresh auth cache — must do full browser check (auth + balance)
+        pass
+
     site = _get_site_class(site_name)()
     try:
         await _launch_authenticated_site(site, get_storage_state(user_id, site_name), get_cookies(user_id, site_name), site_name, headless=True)
@@ -496,6 +526,9 @@ async def check_site_preflight(user_id: str, site_name: str) -> dict:
             result["errors"].append("Сессия площадки истекла. Войдите заново.")
             return result
         result["auth"] = "valid"
+        # Update auth cache so future checks are faster
+        _AUTH_CACHE[auth_cache_key] = (time.monotonic(), "valid")
+        _write_persistent_auth(user_id, site_name, "valid")
         if site_name in {"ss_ge", "myhome_ge"}:
             balance_error = ""
             balance_check = getattr(site, "_check_balance", None)
@@ -525,6 +558,8 @@ async def check_site_preflight(user_id: str, site_name: str) -> dict:
             await site._close()
         except Exception:
             pass
+    # Cache the result (even on partial errors, to avoid hammering the browser)
+    _PREFLIGHT_CACHE[pf_key] = (time.monotonic(), result)
     return result
 
 
