@@ -1403,7 +1403,7 @@ echo "Steel Browser is running on port 8080"
 
   // Poll parser status
   const seenParseTasks = new Set<string>();
-  app.use('/api/realtors/status/:taskId', async (req, res) => {
+  app.use('/api/realtors/status/:taskId', authMiddleware, async (req, res) => {
     try {
       const resp = await fetch(`${PYTHON_API}/api/parse/${req.params.taskId}`);
       const data = await resp.json();
@@ -1494,7 +1494,7 @@ echo "Steel Browser is running on port 8080"
   });
 
   // List realtors from DB
-  app.use('/api/realtors/list', async (req, res) => {
+  app.use('/api/realtors/list', authMiddleware, async (req, res) => {
     try {
       const { source, min_listings = 0, limit = 50 } = req.query;
       let url = `${PYTHON_API}/api/realtors?limit=${limit}`;
@@ -1508,7 +1508,7 @@ echo "Steel Browser is running on port 8080"
   });
 
   // Realtor stats
-  app.use('/api/realtors/stats', async (req, res) => {
+  app.use('/api/realtors/stats', authMiddleware, async (req, res) => {
     try {
       const resp = await fetch(`${PYTHON_API}/api/realtors/stats`);
       res.json(await resp.json());
@@ -1984,6 +1984,24 @@ echo "Steel Browser is running on port 8080"
 
   // === CRM Auth ===
   const sessions = new Map<string, { userId: string; role: string; name: string; login: string; expiresAt: number }>();
+  const crmLoginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+  function allowCrmLogin(req: any, login: string): boolean {
+    const key = `${req.ip || 'unknown'}:${String(login).toLowerCase()}`;
+    const now = Date.now();
+    const entry = crmLoginAttempts.get(key);
+    if (!entry || now >= entry.resetAt) {
+      crmLoginAttempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
+      return true;
+    }
+    entry.count += 1;
+    if (entry.count <= 5) return true;
+    return false;
+  }
+
+  function clearCrmLoginAttempts(req: any, login: string) {
+    crmLoginAttempts.delete(`${req.ip || 'unknown'}:${String(login).toLowerCase()}`);
+  }
 
   function authMiddleware(req: any, res: any, next: any) {
     const authorization = String(req.headers.authorization || '');
@@ -2013,8 +2031,10 @@ echo "Steel Browser is running on port 8080"
   app.post('/api/crm/login', (req, res) => {
     const { login, password } = req.body;
     if (!login || !password) return res.status(400).json({ error: 'login and password required' });
+    if (!allowCrmLogin(req, login)) return res.status(429).json({ error: 'Too many login attempts. Try again in 15 minutes.' });
     const user = crmLogin(login, password);
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    clearCrmLoginAttempts(req, login);
     const token = crypto.randomUUID();
     const session = { userId: user.id, name: user.name, login: user.login, role: user.role, expiresAt: Date.now() + 8 * 60 * 60 * 1000 };
     sessions.set(token, session);
