@@ -835,7 +835,8 @@ echo "Steel Browser is running on port 8080"
           }
           const successful = siteResults.filter(item => item.result?.status === 'success');
           const failed = siteResults.filter(item => item.result?.status !== 'success');
-          const unknown = failed.some(item => item.result?.error_code === 'PUBLISH_NOT_VERIFIED' || item.result?.stage === 'submit');
+          const unknown = task.status === 'publish_unknown'
+            || failed.some(item => item.result?.error_code === 'PUBLISH_NOT_VERIFIED' || item.result?.stage === 'submit');
           const status = failed.length === 0
             ? 'published'
             : unknown
@@ -869,7 +870,9 @@ echo "Steel Browser is running on port 8080"
              userId,
              platform: item.platform,
              taskId,
-             status: item.result?.status === 'success' ? 'published' : (item.result?.error_code === 'PUBLISH_NOT_VERIFIED' ? 'publish_unknown' : 'failed'),
+             status: item.result?.status === 'success'
+               ? 'published'
+               : (unknown || item.result?.error_code === 'PUBLISH_NOT_VERIFIED' ? 'publish_unknown' : 'failed'),
              url: item.result?.url,
              error: item.result?.user_message || item.result?.error,
            })));
@@ -901,14 +904,20 @@ echo "Steel Browser is running on port 8080"
       console.warn(`[Publish recovery] ${error.message}`);
       return;
     }
+    const grouped = new Map<string, any[]>();
     for (const publication of publications || []) {
       if (!publication.task_id) continue;
+      const key = `${publication.task_id}:${publication.listing_id}`;
+      grouped.set(key, [...(grouped.get(key) || []), publication]);
+    }
+    for (const group of grouped.values()) {
+      const [publication] = group;
       const { data: listing } = await supabaseServer.from('listings').select('*').eq('id', publication.listing_id).maybeSingle();
       if (!listing) continue;
       monitorPublishTask(
         publication.task_id,
         publication.listing_id,
-        publication.platform,
+        group.map(item => item.platform),
         publication.user_id,
         { ...listing, photo_urls: listing.images || [] },
       );
